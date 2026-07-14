@@ -39,7 +39,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output-dir",
-        default=os.path.join(os.getcwd(), "data", "log"),
+        default=os.path.join(os.getcwd(), "data", "final"),
         help="Directory where subset and pair files are written.",
     )
     parser.add_argument(
@@ -51,13 +51,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--subset-size",
         type=int,
-        default=500,
+        default=40,
         help="Number of audio records to sample. Use 0 to keep all eligible records.",
     )
     parser.add_argument(
         "--pair-count",
         type=int,
-        default=2000,
+        default=20,
         help="Number of unique two-audio pairs to create.",
     )
     parser.add_argument(
