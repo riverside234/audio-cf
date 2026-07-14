@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import itertools
 import json
+import os
 import random
 import re
 import sys
@@ -33,12 +34,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--input-manifest-path",
-        default="data/processed/clotho_v0/full_manifest.parquet",
+        default=os.path.join(os.getcwd(), "data", "log", "full_manifest.parquet"),
         help="Path to full_manifest.parquet or full_manifest.jsonl from data_process.py.",
     )
     parser.add_argument(
         "--output-dir",
-        default="data/processed/clotho_v0",
+        default=os.path.join(os.getcwd(), "data", "log"),
         help="Directory where subset and pair files are written.",
     )
     parser.add_argument(

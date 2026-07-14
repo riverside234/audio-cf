@@ -5,8 +5,9 @@ This script is the first deterministic stage of the dataset pipeline:
 
     Zenodo raw files -> full_manifest.parquet/jsonl
 
-It expects the Clotho v1.0 files from Zenodo record 3490684, but the
-paths are configurable so the same script can be used on another machine.
+It expects the Clotho files from Zenodo record 3490684, including the
+development, validation, and evaluation splits. Paths are configurable so
+the same script can be used on another machine.
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ import wave
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
-
+import os
 
 SOURCE_DATASET = "clotho"
 SOURCE_RECORD_ID = "3490684"
@@ -31,13 +32,22 @@ SOURCE_VERSION = "v1.0"
 
 SPLIT_FILES = {
     "development": {
-        "archive": "clotho_audio_development.7z",
+        "archives": ["clotho_audio_development.7z"],
         "captions": "clotho_captions_development.csv",
         "metadata": "clotho_metadata_development.csv",
         "audio_dir": "development",
     },
+    "validation": {
+        "archives": ["clotho_audio_validation.7z"],
+        "captions": "clotho_captions_validation.csv",
+        "metadata": "clotho_metadata_validation.csv",
+        "audio_dir": "validation",
+    },
     "evaluation": {
-        "archive": "clotho_audio_evaluation.7z",
+        "archives": [
+            "clotho_audio_evaluation.7z",
+            "clotho_audio_evalution.7z",
+        ],
         "captions": "clotho_captions_evaluation.csv",
         "metadata": "clotho_metadata_evaluation.csv",
         "audio_dir": "evaluation",
@@ -62,18 +72,18 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--clotho-root",
-        default="data/raw/clotho/zenodo_3490684",
+        default=os.path.join(os.getcwd(), "data"),
         help="Root directory containing Zenodo Clotho files or subfolders.",
     )
     parser.add_argument(
         "--output-dir",
-        default="data/processed/clotho_v0",
+        default=os.path.join(os.getcwd(), "data", "log"),
         help="Directory where manifest and process logs are written.",
     )
     parser.add_argument(
         "--splits",
         nargs="+",
-        default=["development"],
+        default=["development", "validation", "evaluation"],
         choices=sorted(SPLIT_FILES),
         help="Clotho splits to process.",
     )
@@ -143,6 +153,14 @@ def find_file(root: Path, preferred: Path, filename: str) -> Optional[Path]:
     return matches[0] if matches else None
 
 
+def find_first_file(root: Path, preferred_dir: Path, filenames: Sequence[str]) -> Optional[Path]:
+    for filename in filenames:
+        found = find_file(root, preferred_dir / filename, filename)
+        if found is not None:
+            return found
+    return None
+
+
 def split_dirs(root: Path) -> Dict[str, Path]:
     return {
         "archives": root / "archives",
@@ -193,6 +211,7 @@ def maybe_extract_archive(
     split: str,
     extract_archives: bool,
     errors: List[Dict[str, Any]],
+    expected_archives: Optional[Sequence[str]] = None,
 ) -> None:
     if audio_files_present(audio_dir):
         return
@@ -214,6 +233,7 @@ def maybe_extract_archive(
                 "stage": "extract",
                 "split": split,
                 "error_type": "archive_missing",
+                "expected_archives": list(expected_archives or []),
                 "message": f"Archive not found for split {split}.",
             }
         )
@@ -352,8 +372,10 @@ def normalize_record(
         "keywords": split_keywords(metadata["keywords"]),
         "sound_id": metadata["sound_id"],
         "sound_link": metadata["sound_link"],
+        "freesound_url": metadata["sound_link"],
         "start_end_samples": metadata["start_end_samples"],
         "manufacturer": metadata["manufacturer"],
+        "freesound_uploader": metadata["manufacturer"],
         "license_url": metadata["license"],
         "metadata": metadata,
         "metadata_json": json.dumps(metadata, ensure_ascii=False, sort_keys=True),
@@ -406,7 +428,7 @@ def process_split(
     dirs = split_dirs(root)
     spec = SPLIT_FILES[split]
 
-    archive_path = find_file(root, dirs["archives"] / spec["archive"], spec["archive"])
+    archive_path = find_first_file(root, dirs["archives"], spec["archives"])
     captions_path = find_file(root, dirs["captions"] / spec["captions"], spec["captions"])
     metadata_path = find_file(root, dirs["metadata"] / spec["metadata"], spec["metadata"])
     audio_dir = dirs["audio"] / spec["audio_dir"]
@@ -416,7 +438,14 @@ def process_split(
     if metadata_path is None:
         raise FileNotFoundError(f"Metadata CSV not found for split {split}.")
 
-    maybe_extract_archive(archive_path, audio_dir, split, extract_archives, errors)
+    maybe_extract_archive(
+        archive_path,
+        audio_dir,
+        split,
+        extract_archives,
+        errors,
+        expected_archives=spec["archives"],
+    )
 
     caption_rows = read_csv_dicts(captions_path)
     metadata_rows = read_csv_dicts(metadata_path)
