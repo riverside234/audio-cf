@@ -65,6 +65,8 @@ METADATA_COLUMNS = [
     "license",
 ]
 
+CSV_ENCODINGS = ["utf-8-sig", "utf-8", "cp1252", "latin-1"]
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -265,23 +267,39 @@ def maybe_extract_archive(
         )
 
 
+def clean_csv_row(row: Dict[Optional[str], Any]) -> Dict[str, str]:
+    cleaned: Dict[str, str] = {}
+    for key, value in row.items():
+        if key is None:
+            continue
+        if value is None:
+            cleaned[key] = ""
+        elif isinstance(value, list):
+            cleaned[key] = " ".join(str(item) for item in value).strip()
+        else:
+            cleaned[key] = str(value).strip()
+    return cleaned
+
+
 def read_csv_dicts(path: Path) -> List[Dict[str, str]]:
-    with path.open("r", encoding="utf-8-sig", newline="") as handle:
-        reader = csv.DictReader(handle)
-        rows: List[Dict[str, str]] = []
-        for row in reader:
-            cleaned: Dict[str, str] = {}
-            for key, value in row.items():
-                if key is None:
-                    continue
-                if value is None:
-                    cleaned[key] = ""
-                elif isinstance(value, list):
-                    cleaned[key] = " ".join(str(item) for item in value).strip()
-                else:
-                    cleaned[key] = str(value).strip()
-            rows.append(cleaned)
-        return rows
+    last_decode_error: Optional[UnicodeDecodeError] = None
+    for encoding in CSV_ENCODINGS:
+        try:
+            with path.open("r", encoding=encoding, newline="") as handle:
+                reader = csv.DictReader(handle)
+                return [clean_csv_row(row) for row in reader]
+        except UnicodeDecodeError as exc:
+            last_decode_error = exc
+
+    if last_decode_error is not None:
+        raise UnicodeDecodeError(
+            last_decode_error.encoding,
+            last_decode_error.object,
+            last_decode_error.start,
+            last_decode_error.end,
+            f"Could not decode {path} using {CSV_ENCODINGS}: {last_decode_error.reason}",
+        ) from last_decode_error
+    raise RuntimeError(f"Could not read CSV file: {path}")
 
 
 def require_columns(
