@@ -3,7 +3,7 @@
 
 This script is the first deterministic stage of the dataset pipeline:
 
-    Zenodo raw files -> full_manifest.parquet/jsonl
+    Zenodo raw files -> full_manifest.parquet/jsonl + full_manifest_provenance.parquet
 
 It expects the Clotho files from Zenodo record 3490684, including the
 development, validation, and evaluation splits. Paths are configurable so
@@ -362,7 +362,7 @@ def normalize_record(
     metadata_row: Dict[str, str],
     audio_path: Path,
     path_mode: str,
-) -> Dict[str, Any]:
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     file_name = caption_row["file_name"].strip()
     captions = captions_from_row(caption_row)
     metadata = {
@@ -374,7 +374,18 @@ def normalize_record(
         "license": metadata_row.get("license", ""),
     }
     audio_id = f"clotho_{split}_{stable_hash(file_name)}"
-    return {
+    manifest_record = {
+        "audio_id": audio_id,
+        "split": split,
+        "original_file_name": file_name,
+        "local_audio_path": display_path(audio_path, path_mode),
+        "duration_seconds": wav_duration_seconds(audio_path),
+        "captions": captions,
+        "caption_summary": caption_summary(captions),
+        "keywords": split_keywords(metadata["keywords"]),
+        "sound_id": metadata["sound_id"],
+    }
+    provenance_record = {
         "audio_id": audio_id,
         "source_dataset": SOURCE_DATASET,
         "source_record_id": SOURCE_RECORD_ID,
@@ -382,12 +393,7 @@ def normalize_record(
         "source_version": SOURCE_VERSION,
         "split": split,
         "original_file_name": file_name,
-        "local_audio_path": display_path(audio_path, path_mode),
         "local_audio_path_abs": display_path(audio_path, "absolute"),
-        "duration_seconds": wav_duration_seconds(audio_path),
-        "captions": captions,
-        "caption_summary": caption_summary(captions),
-        "keywords": split_keywords(metadata["keywords"]),
         "sound_id": metadata["sound_id"],
         "sound_link": metadata["sound_link"],
         "freesound_url": metadata["sound_link"],
@@ -398,6 +404,7 @@ def normalize_record(
         "metadata": metadata,
         "metadata_json": json.dumps(metadata, ensure_ascii=False, sort_keys=True),
     }
+    return manifest_record, provenance_record
 
 
 def write_json(path: Path, payload: Any) -> None:
@@ -442,7 +449,7 @@ def process_split(
     extract_archives: bool,
     path_mode: str,
     errors: List[Dict[str, Any]],
-) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, int]]:
     dirs = split_dirs(root)
     spec = SPLIT_FILES[split]
 
@@ -476,6 +483,7 @@ def process_split(
         audio_by_file = build_audio_index(root)
 
     records: List[Dict[str, Any]] = []
+    provenance_records: List[Dict[str, Any]] = []
     missing_audio = 0
     missing_metadata = 0
 
@@ -518,18 +526,21 @@ def process_split(
             )
             continue
 
-        records.append(normalize_record(split, row, metadata, audio_path, path_mode))
+        record, provenance = normalize_record(split, row, metadata, audio_path, path_mode)
+        records.append(record)
+        provenance_records.append(provenance)
 
     stats = {
         "caption_rows_loaded": len(caption_rows),
         "metadata_rows_loaded": len(metadata_rows),
         "audio_files_found": len(audio_by_file),
         "normalized_records_written": len(records),
+        "provenance_records_written": len(provenance_records),
         "missing_audio_files": missing_audio,
         "missing_metadata_rows": missing_metadata,
         "missing_caption_rows": max(0, len(metadata_rows) - len(caption_rows)),
     }
-    return records, stats
+    return records, provenance_records, stats
 
 
 def main() -> int:
@@ -542,6 +553,7 @@ def main() -> int:
     outputs = {
         "jsonl": output_dir / "full_manifest.jsonl",
         "parquet": output_dir / "full_manifest.parquet",
+        "provenance_parquet": output_dir / "full_manifest_provenance.parquet",
         "config": output_dir / "process_config_used.yaml",
         "stats": output_dir / "process_stats.json",
         "errors": output_dir / "process_errors.jsonl",
@@ -550,11 +562,12 @@ def main() -> int:
         assert_can_write(path, args.overwrite)
 
     all_records: List[Dict[str, Any]] = []
+    all_provenance_records: List[Dict[str, Any]] = []
     errors: List[Dict[str, Any]] = []
     split_stats: Dict[str, Dict[str, int]] = {}
 
     for split in args.splits:
-        records, stats = process_split(
+        records, provenance_records, stats = process_split(
             root=root,
             split=split,
             extract_archives=args.extract_archives,
@@ -562,6 +575,7 @@ def main() -> int:
             errors=errors,
         )
         all_records.extend(records)
+        all_provenance_records.extend(provenance_records)
         split_stats[split] = stats
 
     if args.strict and errors:
@@ -587,17 +601,23 @@ def main() -> int:
         "split_names": args.splits,
         "processing_timestamp": utc_now(),
         "total_records_written": len(all_records),
+        "total_provenance_records_written": len(all_provenance_records),
         "total_errors": len(errors),
         "split_stats": split_stats,
     }
 
     write_jsonl(outputs["jsonl"], all_records)
     write_parquet(outputs["parquet"], all_records)
+    write_parquet(outputs["provenance_parquet"], all_provenance_records)
     write_json(outputs["config"], config)
     write_json(outputs["stats"], stats)
     write_jsonl(outputs["errors"], errors)
 
     print(f"Wrote {len(all_records)} records to {outputs['parquet']}")
+    print(
+        f"Wrote {len(all_provenance_records)} provenance records "
+        f"to {outputs['provenance_parquet']}"
+    )
     if errors:
         print(f"Recorded {len(errors)} process errors in {outputs['errors']}")
     return 0

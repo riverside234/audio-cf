@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-"""Create reproducible Clotho subsets and unique two-audio pairs.
+"""Create reproducible Clotho subsets and unique audio units.
 
 This script is the second deterministic stage of the dataset pipeline:
 
-    full_manifest.parquet -> subset_manifest.parquet + pairs.parquet
+    full_manifest.parquet -> subset_manifest.parquet + audio_units.parquet
+
+An audio unit is one or more audio records grouped for a single synthetic
+example. The original two-audio pair setup is now represented by
+--audio-count 2. Use --audio-count 1 for single-audio examples, or larger
+values for multi-audio examples.
 
 It intentionally does not parse raw Zenodo CSV files. Run data_process.py first.
 """
@@ -13,6 +18,7 @@ from __future__ import annotations
 import argparse
 import itertools
 import json
+import math
 import os
 import random
 import re
@@ -24,13 +30,13 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 
 GROUNDING_STANDARD = "caption_grounded"
-PAIR_SCHEMA_VERSION = "pair_manifest_v0"
+UNIT_SCHEMA_VERSION = "audio_unit_manifest_v0"
 TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Sample a Clotho manifest and create unique two-audio pairs."
+        description="Sample a Clotho manifest and create unique audio units."
     )
     parser.add_argument(
         "--input-manifest-path",
@@ -40,7 +46,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         default=os.path.join(os.getcwd(), "data", "final"),
-        help="Directory where subset and pair files are written.",
+        help="Directory where subset and audio-unit files are written.",
     )
     parser.add_argument(
         "--splits",
@@ -55,34 +61,55 @@ def parse_args() -> argparse.Namespace:
         help="Number of audio records to sample. Use 0 to keep all eligible records.",
     )
     parser.add_argument(
+        "--unit-count",
         "--pair-count",
+        dest="unit_count",
         type=int,
         default=20,
-        help="Number of unique two-audio pairs to create.",
+        help=(
+            "Number of unique audio units to create. --pair-count is kept as a "
+            "backwards-compatible alias."
+        ),
+    )
+    parser.add_argument(
+        "--audio-count",
+        type=int,
+        default=2,
+        help="Number of audio clips per unit. Use 2 for the original paired-audio setup.",
     )
     parser.add_argument(
         "--random-seed",
         type=int,
         default=42,
-        help="Seed for reproducible subsetting and pairing.",
+        help="Seed for reproducible subsetting and grouping.",
     )
     parser.add_argument(
+        "--grouping-strategy",
         "--pairing-strategy",
+        dest="grouping_strategy",
         choices=["random", "caption_similar", "caption_dissimilar"],
         default="random",
-        help="Pairing strategy. Similar/dissimilar use simple lexical caption overlap.",
+        help=(
+            "Audio-unit grouping strategy. Similar/dissimilar use simple lexical "
+            "caption overlap. --pairing-strategy is a backwards-compatible alias."
+        ),
     )
     parser.add_argument(
         "--max-audio-reuse",
         type=int,
         default=None,
-        help="Maximum times an audio_id may appear across pairs. Default is unlimited.",
+        help="Maximum times an audio_id may appear across units. Default is unlimited.",
     )
     parser.add_argument(
+        "--max-enumerated-units",
         "--max-enumerated-pairs",
+        dest="max_enumerated_units",
         type=int,
         default=2_000_000,
-        help="Maximum candidate pairs to enumerate before falling back to random attempts.",
+        help=(
+            "Maximum candidate units to enumerate before falling back to random "
+            "attempts. --max-enumerated-pairs is a backwards-compatible alias."
+        ),
     )
     parser.add_argument(
         "--similarity-min",
@@ -110,7 +137,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="Fail if requested pair_count cannot be satisfied.",
+        help="Fail if requested unit_count cannot be satisfied.",
     )
     return parser.parse_args()
 
@@ -205,12 +232,8 @@ def validate_manifest_rows(rows: Sequence[Dict[str, Any]]) -> None:
     required = [
         "audio_id",
         "split",
-        "original_file_name",
         "local_audio_path",
         "captions",
-        "caption_summary",
-        "license_url",
-        "sound_link",
     ]
     if not rows:
         raise ValueError("Input manifest is empty.")
@@ -236,19 +259,42 @@ def sample_subset(
     return shuffled[:subset_size]
 
 
-def pair_key(audio_id_1: str, audio_id_2: str) -> Tuple[str, str]:
-    return tuple(sorted((audio_id_1, audio_id_2)))
+def get_list(record: Dict[str, Any], key: str) -> List[str]:
+    value = record.get(key)
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    return [str(value)]
 
 
-def pair_id_for(audio_id_1: str, audio_id_2: str) -> str:
-    key = "::".join(pair_key(audio_id_1, audio_id_2))
+def lean_manifest_record(record: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "audio_id": record.get("audio_id", ""),
+        "split": record.get("split", ""),
+        "original_file_name": record.get("original_file_name", ""),
+        "local_audio_path": record.get("local_audio_path", ""),
+        "duration_seconds": record.get("duration_seconds"),
+        "captions": get_list(record, "captions"),
+        "caption_summary": record.get("caption_summary", ""),
+        "keywords": get_list(record, "keywords"),
+        "sound_id": record.get("sound_id", ""),
+    }
+
+
+def canonical_unit_key(audio_ids: Sequence[str]) -> Tuple[str, ...]:
+    return tuple(sorted(str(audio_id) for audio_id in audio_ids))
+
+
+def unit_id_for(audio_ids: Sequence[str]) -> str:
     import hashlib
 
-    return f"pair_{hashlib.sha1(key.encode('utf-8')).hexdigest()[:16]}"
+    key = "::".join(canonical_unit_key(audio_ids))
+    return f"unit_{hashlib.sha1(key.encode('utf-8')).hexdigest()[:16]}"
 
 
 def caption_tokens(record: Dict[str, Any]) -> Set[str]:
-    text = record.get("caption_summary") or " ".join(record.get("captions") or [])
+    text = record.get("caption_summary") or " ".join(get_list(record, "captions"))
     return set(TOKEN_RE.findall(str(text).lower()))
 
 
@@ -261,276 +307,258 @@ def jaccard_similarity(tokens_a: Set[str], tokens_b: Set[str]) -> float:
     return len(tokens_a & tokens_b) / float(len(union))
 
 
+def group_similarity(indices: Sequence[int], token_sets: Sequence[Set[str]]) -> float:
+    if len(indices) < 2:
+        return 0.0
+
+    scores = [
+        jaccard_similarity(token_sets[i], token_sets[j])
+        for i, j in itertools.combinations(indices, 2)
+    ]
+    if not scores:
+        return 0.0
+    return sum(scores) / float(len(scores))
+
+
 def candidate_allowed_by_strategy(
-    i: int,
-    j: int,
+    indices: Sequence[int],
     strategy: str,
     token_sets: Sequence[Set[str]],
     similarity_min: float,
     similarity_max: float,
     dissimilarity_max: float,
 ) -> bool:
-    if strategy == "random":
+    if strategy == "random" or len(indices) < 2:
         return True
 
-    score = jaccard_similarity(token_sets[i], token_sets[j])
+    score = group_similarity(indices, token_sets)
     if strategy == "caption_similar":
         return similarity_min <= score <= similarity_max
     if strategy == "caption_dissimilar":
         return score <= dissimilarity_max
-    raise ValueError(f"Unknown pairing strategy: {strategy}")
+    raise ValueError(f"Unknown grouping strategy: {strategy}")
 
 
 def enumerate_candidates(
     records: Sequence[Dict[str, Any]],
+    audio_count: int,
     strategy: str,
     token_sets: Sequence[Set[str]],
     similarity_min: float,
     similarity_max: float,
     dissimilarity_max: float,
-) -> List[Tuple[int, int]]:
-    candidates: List[Tuple[int, int]] = []
-    for i, j in itertools.combinations(range(len(records)), 2):
+) -> List[Tuple[int, ...]]:
+    candidates: List[Tuple[int, ...]] = []
+    for indices in itertools.combinations(range(len(records)), audio_count):
         if candidate_allowed_by_strategy(
-            i,
-            j,
+            indices,
             strategy,
             token_sets,
             similarity_min,
             similarity_max,
             dissimilarity_max,
         ):
-            candidates.append((i, j))
+            candidates.append(indices)
     return candidates
 
 
-def select_pairs_from_candidates(
-    candidates: List[Tuple[int, int]],
+def select_units_from_candidates(
+    candidates: List[Tuple[int, ...]],
     records: Sequence[Dict[str, Any]],
-    pair_count: int,
+    unit_count: int,
     rng: random.Random,
     max_audio_reuse: Optional[int],
-) -> Tuple[List[Tuple[int, int]], Dict[str, int]]:
+) -> Tuple[List[Tuple[int, ...]], Dict[str, int]]:
     rng.shuffle(candidates)
-    selected: List[Tuple[int, int]] = []
-    seen: Set[Tuple[str, str]] = set()
+    selected: List[Tuple[int, ...]] = []
+    seen: Set[Tuple[str, ...]] = set()
     reuse_counts: Counter[str] = Counter()
     stats = {
-        "duplicate_pair_attempts_skipped": 0,
-        "self_pair_rejections": 0,
+        "duplicate_unit_attempts_skipped": 0,
+        "repeated_audio_in_unit_rejections": 0,
         "audio_reuse_rejections": 0,
     }
 
-    for i, j in candidates:
-        if len(selected) >= pair_count:
+    for indices in candidates:
+        if len(selected) >= unit_count:
             break
 
-        id_i = str(records[i]["audio_id"])
-        id_j = str(records[j]["audio_id"])
-        if id_i == id_j:
-            stats["self_pair_rejections"] += 1
+        audio_ids = [str(records[index]["audio_id"]) for index in indices]
+        if len(set(audio_ids)) != len(audio_ids):
+            stats["repeated_audio_in_unit_rejections"] += 1
             continue
 
-        key = pair_key(id_i, id_j)
+        key = canonical_unit_key(audio_ids)
         if key in seen:
-            stats["duplicate_pair_attempts_skipped"] += 1
+            stats["duplicate_unit_attempts_skipped"] += 1
             continue
 
-        if max_audio_reuse is not None:
-            if reuse_counts[id_i] >= max_audio_reuse or reuse_counts[id_j] >= max_audio_reuse:
-                stats["audio_reuse_rejections"] += 1
-                continue
+        if max_audio_reuse is not None and any(
+            reuse_counts[audio_id] >= max_audio_reuse for audio_id in audio_ids
+        ):
+            stats["audio_reuse_rejections"] += 1
+            continue
 
         seen.add(key)
-        reuse_counts[id_i] += 1
-        reuse_counts[id_j] += 1
-        selected.append((i, j))
+        for audio_id in audio_ids:
+            reuse_counts[audio_id] += 1
+        selected.append(indices)
 
-    stats["unique_audio_ids_in_pairs"] = len(reuse_counts)
+    stats["unique_audio_ids_in_units"] = len(reuse_counts)
     return selected, stats
 
 
-def select_pairs_by_random_attempts(
+def select_units_by_random_attempts(
     records: Sequence[Dict[str, Any]],
-    pair_count: int,
+    audio_count: int,
+    unit_count: int,
     rng: random.Random,
     max_audio_reuse: Optional[int],
     max_attempts: int,
-) -> Tuple[List[Tuple[int, int]], Dict[str, int]]:
-    selected: List[Tuple[int, int]] = []
-    seen: Set[Tuple[str, str]] = set()
+) -> Tuple[List[Tuple[int, ...]], Dict[str, int]]:
+    selected: List[Tuple[int, ...]] = []
+    seen: Set[Tuple[str, ...]] = set()
     reuse_counts: Counter[str] = Counter()
     stats = {
-        "duplicate_pair_attempts_skipped": 0,
-        "self_pair_rejections": 0,
+        "duplicate_unit_attempts_skipped": 0,
+        "repeated_audio_in_unit_rejections": 0,
         "audio_reuse_rejections": 0,
         "random_attempts": 0,
     }
 
     n = len(records)
-    while len(selected) < pair_count and stats["random_attempts"] < max_attempts:
+    while len(selected) < unit_count and stats["random_attempts"] < max_attempts:
         stats["random_attempts"] += 1
-        i, j = rng.sample(range(n), 2)
-        id_i = str(records[i]["audio_id"])
-        id_j = str(records[j]["audio_id"])
-        if id_i == id_j:
-            stats["self_pair_rejections"] += 1
+        indices = tuple(rng.sample(range(n), audio_count))
+        audio_ids = [str(records[index]["audio_id"]) for index in indices]
+        if len(set(audio_ids)) != len(audio_ids):
+            stats["repeated_audio_in_unit_rejections"] += 1
             continue
 
-        key = pair_key(id_i, id_j)
+        key = canonical_unit_key(audio_ids)
         if key in seen:
-            stats["duplicate_pair_attempts_skipped"] += 1
+            stats["duplicate_unit_attempts_skipped"] += 1
             continue
 
-        if max_audio_reuse is not None:
-            if reuse_counts[id_i] >= max_audio_reuse or reuse_counts[id_j] >= max_audio_reuse:
-                stats["audio_reuse_rejections"] += 1
-                continue
+        if max_audio_reuse is not None and any(
+            reuse_counts[audio_id] >= max_audio_reuse for audio_id in audio_ids
+        ):
+            stats["audio_reuse_rejections"] += 1
+            continue
 
         seen.add(key)
-        reuse_counts[id_i] += 1
-        reuse_counts[id_j] += 1
-        selected.append((i, j))
+        for audio_id in audio_ids:
+            reuse_counts[audio_id] += 1
+        selected.append(indices)
 
-    stats["unique_audio_ids_in_pairs"] = len(reuse_counts)
+    stats["unique_audio_ids_in_units"] = len(reuse_counts)
     return selected, stats
 
 
-def get_list(record: Dict[str, Any], key: str) -> List[str]:
-    value = record.get(key)
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return [str(item) for item in value]
-    return [str(value)]
-
-
-def audio_prefix(record: Dict[str, Any], prefix: str) -> Dict[str, Any]:
-    return {
-        f"{prefix}_id": record.get("audio_id", ""),
-        f"{prefix}_split": record.get("split", ""),
-        f"{prefix}_file_name": record.get("original_file_name", ""),
-        f"{prefix}_path": record.get("local_audio_path", ""),
-        f"{prefix}_path_abs": record.get("local_audio_path_abs", ""),
-        f"{prefix}_duration_seconds": record.get("duration_seconds"),
-        f"{prefix}_captions": get_list(record, "captions"),
-        f"{prefix}_caption_summary": record.get("caption_summary", ""),
-        f"{prefix}_keywords": get_list(record, "keywords"),
-        f"{prefix}_sound_id": record.get("sound_id", ""),
-        f"{prefix}_sound_link": record.get("sound_link", ""),
-        f"{prefix}_start_end_samples": record.get("start_end_samples", ""),
-        f"{prefix}_manufacturer": record.get("manufacturer", ""),
-        f"{prefix}_license_url": record.get("license_url", ""),
-    }
-
-
-def make_pair_record(
-    pair_index: int,
-    record_1: Dict[str, Any],
-    record_2: Dict[str, Any],
-    pairing_strategy: str,
-    random_seed: int,
-) -> Dict[str, Any]:
-    id_1 = str(record_1["audio_id"])
-    id_2 = str(record_2["audio_id"])
-    record = {
-        "pair_id": pair_id_for(id_1, id_2),
-        "pair_index": pair_index,
-        "schema_version": PAIR_SCHEMA_VERSION,
-        "source_dataset": record_1.get("source_dataset", "clotho"),
-        "source_record_id": record_1.get("source_record_id", ""),
-        "source_record_url": record_1.get("source_record_url", ""),
-        "source_version": record_1.get("source_version", ""),
-        "grounding_standard": GROUNDING_STANDARD,
-        "pairing_strategy": pairing_strategy,
-        "random_seed": random_seed,
-        "canonical_pair_key": "::".join(pair_key(id_1, id_2)),
-    }
-    record.update(audio_prefix(record_1, "audio_1"))
-    record.update(audio_prefix(record_2, "audio_2"))
-    return record
-
-
-def create_pairs(
+def create_units(
     records: Sequence[Dict[str, Any]],
-    pair_count: int,
-    pairing_strategy: str,
+    unit_count: int,
+    audio_count: int,
+    grouping_strategy: str,
     rng: random.Random,
     max_audio_reuse: Optional[int],
-    max_enumerated_pairs: int,
+    max_enumerated_units: int,
     similarity_min: float,
     similarity_max: float,
     dissimilarity_max: float,
-) -> Tuple[List[Tuple[int, int]], Dict[str, int], List[Dict[str, Any]]]:
+) -> Tuple[List[Tuple[int, ...]], Dict[str, int], List[Dict[str, Any]]]:
     errors: List[Dict[str, Any]] = []
     n = len(records)
-    if n < 2:
-        raise ValueError("At least two records are required to create pairs.")
-    if pair_count <= 0:
-        return [], {}, errors
+    if audio_count < 1:
+        raise ValueError("--audio-count must be at least 1.")
+    if n < audio_count:
+        raise ValueError(
+            f"Subset contains {n} records, fewer than --audio-count={audio_count}."
+        )
+    if unit_count <= 0:
+        return [], {"possible_unordered_units": math.comb(n, audio_count)}, errors
 
-    possible_pairs = n * (n - 1) // 2
-    requested = min(pair_count, possible_pairs)
+    possible_units = math.comb(n, audio_count)
+    requested = min(unit_count, possible_units)
     token_sets = [caption_tokens(record) for record in records]
 
-    if possible_pairs <= max_enumerated_pairs:
+    if possible_units <= max_enumerated_units:
         candidates = enumerate_candidates(
             records,
-            pairing_strategy,
+            audio_count,
+            grouping_strategy,
             token_sets,
             similarity_min,
             similarity_max,
             dissimilarity_max,
         )
-        selected, stats = select_pairs_from_candidates(
+        selected, stats = select_units_from_candidates(
             candidates,
             records,
             requested,
             rng,
             max_audio_reuse,
         )
-        stats["candidate_pairs_considered"] = len(candidates)
-        stats["possible_unordered_pairs"] = possible_pairs
-    elif pairing_strategy == "random":
+        stats["candidate_units_considered"] = len(candidates)
+        stats["possible_unordered_units"] = possible_units
+    elif grouping_strategy == "random":
         max_attempts = max(10_000, requested * 100)
-        selected, stats = select_pairs_by_random_attempts(
+        selected, stats = select_units_by_random_attempts(
             records,
+            audio_count,
             requested,
             rng,
             max_audio_reuse,
             max_attempts,
         )
-        stats["candidate_pairs_considered"] = stats.get("random_attempts", 0)
-        stats["possible_unordered_pairs"] = possible_pairs
+        stats["candidate_units_considered"] = stats.get("random_attempts", 0)
+        stats["possible_unordered_units"] = possible_units
     else:
         raise ValueError(
-            f"{pairing_strategy} needs candidate enumeration, but {possible_pairs} "
-            f"possible pairs exceeds --max-enumerated-pairs={max_enumerated_pairs}. "
+            f"{grouping_strategy} needs candidate enumeration, but {possible_units} "
+            f"possible units exceeds --max-enumerated-units={max_enumerated_units}. "
             "Use a smaller subset or raise the limit."
         )
 
-    if pair_count > possible_pairs:
+    if unit_count > possible_units:
         errors.append(
             {
-                "stage": "pair",
-                "error_type": "pair_count_exceeds_possible",
-                "requested_pair_count": pair_count,
-                "possible_unordered_pairs": possible_pairs,
+                "stage": "unit",
+                "error_type": "unit_count_exceeds_possible",
+                "requested_unit_count": unit_count,
+                "possible_unordered_units": possible_units,
             }
         )
 
-    if len(selected) < pair_count:
+    if len(selected) < unit_count:
         errors.append(
             {
-                "stage": "pair",
-                "error_type": "pair_count_not_satisfied",
-                "requested_pair_count": pair_count,
-                "pairs_generated": len(selected),
-                "message": "Constraints or candidate availability prevented more pairs.",
+                "stage": "unit",
+                "error_type": "unit_count_not_satisfied",
+                "requested_unit_count": unit_count,
+                "units_generated": len(selected),
+                "message": "Constraints or candidate availability prevented more units.",
             }
         )
 
     return selected, stats, errors
+
+
+def audio_path_for(record: Dict[str, Any]) -> str:
+    return str(record.get("local_audio_path") or record.get("local_audio_path_abs") or "")
+
+
+def make_unit_record(records: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    audio_ids = [str(record["audio_id"]) for record in records]
+    return {
+        "unit_id": unit_id_for(audio_ids),
+        "schema_version": UNIT_SCHEMA_VERSION,
+        "grounding_standard": GROUNDING_STANDARD,
+        "audio_count": len(records),
+        "audio_ids": audio_ids,
+        "audio_paths": [audio_path_for(record) for record in records],
+        "audio_captions": [get_list(record, "captions") for record in records],
+    }
 
 
 def check_duplicate_audio_ids(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -557,8 +585,8 @@ def main() -> int:
     outputs = {
         "subset_jsonl": output_dir / "subset_manifest.jsonl",
         "subset_parquet": output_dir / "subset_manifest.parquet",
-        "pairs_jsonl": output_dir / "pairs.jsonl",
-        "pairs_parquet": output_dir / "pairs.parquet",
+        "audio_units_jsonl": output_dir / "audio_units.jsonl",
+        "audio_units_parquet": output_dir / "audio_units.parquet",
         "config": output_dir / "filter_config_used.yaml",
         "stats": output_dir / "filter_stats.json",
         "errors": output_dir / "filter_errors.jsonl",
@@ -579,32 +607,30 @@ def main() -> int:
         raise ValueError(f"No records found for requested splits: {args.splits}")
 
     subset = sample_subset(eligible, args.subset_size, rng)
-    if len(subset) < 2:
-        raise ValueError("Subset contains fewer than two records.")
+    if len(subset) < args.audio_count:
+        raise ValueError(
+            f"Subset contains {len(subset)} records, fewer than --audio-count={args.audio_count}."
+        )
 
-    selected_pair_indices, pair_stats, pair_errors = create_pairs(
+    selected_unit_indices, unit_stats, unit_errors = create_units(
         records=subset,
-        pair_count=args.pair_count,
-        pairing_strategy=args.pairing_strategy,
+        unit_count=args.unit_count,
+        audio_count=args.audio_count,
+        grouping_strategy=args.grouping_strategy,
         rng=rng,
         max_audio_reuse=args.max_audio_reuse,
-        max_enumerated_pairs=args.max_enumerated_pairs,
+        max_enumerated_units=args.max_enumerated_units,
         similarity_min=args.similarity_min,
         similarity_max=args.similarity_max,
         dissimilarity_max=args.dissimilarity_max,
     )
-    errors.extend(pair_errors)
+    errors.extend(unit_errors)
 
-    pair_rows = [
-        make_pair_record(
-            pair_index=index,
-            record_1=subset[i],
-            record_2=subset[j],
-            pairing_strategy=args.pairing_strategy,
-            random_seed=args.random_seed,
-        )
-        for index, (i, j) in enumerate(selected_pair_indices)
+    unit_rows = [
+        make_unit_record([subset[index] for index in indices])
+        for indices in selected_unit_indices
     ]
+    subset_rows = [lean_manifest_record(record) for record in subset]
 
     if args.strict and errors:
         write_jsonl(outputs["errors"], errors)
@@ -615,11 +641,12 @@ def main() -> int:
         "output_dir": str(output_dir),
         "splits": args.splits,
         "subset_size": args.subset_size,
-        "pair_count": args.pair_count,
+        "unit_count": args.unit_count,
+        "audio_count": args.audio_count,
         "random_seed": args.random_seed,
-        "pairing_strategy": args.pairing_strategy,
+        "grouping_strategy": args.grouping_strategy,
         "max_audio_reuse": args.max_audio_reuse,
-        "max_enumerated_pairs": args.max_enumerated_pairs,
+        "max_enumerated_units": args.max_enumerated_units,
         "similarity_min": args.similarity_min,
         "similarity_max": args.similarity_max,
         "dissimilarity_max": args.dissimilarity_max,
@@ -628,27 +655,28 @@ def main() -> int:
         "filter_timestamp": utc_now(),
         "original_records_loaded": len(rows),
         "records_after_split_filter": len(eligible),
-        "subset_records_selected": len(subset),
-        "pairs_requested": args.pair_count,
-        "pairs_generated": len(pair_rows),
+        "subset_records_selected": len(subset_rows),
+        "requested_audio_count": args.audio_count,
+        "units_requested": args.unit_count,
+        "units_generated": len(unit_rows),
         "random_seed": args.random_seed,
         "split_names": args.splits,
-        "pairing_strategy": args.pairing_strategy,
+        "grouping_strategy": args.grouping_strategy,
         "max_audio_reuse": args.max_audio_reuse,
         "total_errors": len(errors),
-        **pair_stats,
+        **unit_stats,
     }
 
-    write_jsonl(outputs["subset_jsonl"], subset)
-    write_parquet(outputs["subset_parquet"], subset)
-    write_jsonl(outputs["pairs_jsonl"], pair_rows)
-    write_parquet(outputs["pairs_parquet"], pair_rows)
+    write_jsonl(outputs["subset_jsonl"], subset_rows)
+    write_parquet(outputs["subset_parquet"], subset_rows)
+    write_jsonl(outputs["audio_units_jsonl"], unit_rows)
+    write_parquet(outputs["audio_units_parquet"], unit_rows)
     write_json(outputs["config"], config)
     write_json(outputs["stats"], stats)
     write_jsonl(outputs["errors"], errors)
 
-    print(f"Wrote {len(subset)} subset records to {outputs['subset_parquet']}")
-    print(f"Wrote {len(pair_rows)} pairs to {outputs['pairs_parquet']}")
+    print(f"Wrote {len(subset_rows)} subset records to {outputs['subset_parquet']}")
+    print(f"Wrote {len(unit_rows)} audio units to {outputs['audio_units_parquet']}")
     if errors:
         print(f"Recorded {len(errors)} filter warnings/errors in {outputs['errors']}")
     return 0
