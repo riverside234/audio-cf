@@ -30,7 +30,8 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 
 GROUNDING_STANDARD = "caption_grounded"
-UNIT_SCHEMA_VERSION = "audio_unit_manifest_v0"
+UNIT_SCHEMA_VERSION = "audio_unit_manifest_v1"
+FALLBACK_RELEASE_AUDIO_ROOT = "audio/clotho_v2_1"
 TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 
@@ -232,7 +233,6 @@ def validate_manifest_rows(rows: Sequence[Dict[str, Any]]) -> None:
     required = [
         "audio_id",
         "split",
-        "local_audio_path",
         "captions",
     ]
     if not rows:
@@ -240,6 +240,18 @@ def validate_manifest_rows(rows: Sequence[Dict[str, Any]]) -> None:
     missing = [key for key in required if key not in rows[0]]
     if missing:
         raise ValueError(f"Manifest is missing required fields: {missing}")
+
+    path_hint_fields = ["audio_file_name", "local_audio_path", "original_file_name"]
+    path_hint_missing = [
+        index
+        for index, row in enumerate(rows)
+        if not any(row.get(field) for field in path_hint_fields)
+    ]
+    if path_hint_missing:
+        raise ValueError(
+            "Manifest rows must include at least one of audio_file_name, "
+            f"local_audio_path, or original_file_name. First bad row index: {path_hint_missing[0]}"
+        )
 
 
 def filter_by_split(rows: Sequence[Dict[str, Any]], splits: Sequence[str]) -> List[Dict[str, Any]]:
@@ -273,6 +285,7 @@ def lean_manifest_record(record: Dict[str, Any]) -> Dict[str, Any]:
         "audio_id": record.get("audio_id", ""),
         "split": record.get("split", ""),
         "original_file_name": record.get("original_file_name", ""),
+        "audio_file_name": audio_file_name_for(record),
         "local_audio_path": record.get("local_audio_path", ""),
         "duration_seconds": record.get("duration_seconds"),
         "captions": get_list(record, "captions"),
@@ -544,7 +557,19 @@ def create_units(
     return selected, stats, errors
 
 
-def audio_path_for(record: Dict[str, Any]) -> str:
+def audio_file_name_for(record: Dict[str, Any]) -> str:
+    existing = record.get("audio_file_name")
+    if existing:
+        return str(existing).replace("\\", "/")
+
+    audio_id = str(record.get("audio_id") or "unknown_audio")
+    split = str(record.get("split") or "unknown_split")
+    path_hint = str(record.get("local_audio_path") or record.get("original_file_name") or "")
+    suffix = Path(path_hint).suffix.lower() or ".wav"
+    return f"{FALLBACK_RELEASE_AUDIO_ROOT}/{split}/{audio_id}{suffix}"
+
+
+def local_audio_path_for(record: Dict[str, Any]) -> str:
     return str(record.get("local_audio_path") or record.get("local_audio_path_abs") or "")
 
 
@@ -556,7 +581,8 @@ def make_unit_record(records: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
         "grounding_standard": GROUNDING_STANDARD,
         "audio_count": len(records),
         "audio_ids": audio_ids,
-        "audio_paths": [audio_path_for(record) for record in records],
+        "local_audio_paths": [local_audio_path_for(record) for record in records],
+        "audio_file_names": [audio_file_name_for(record) for record in records],
         "audio_captions": [get_list(record, "captions") for record in records],
     }
 
@@ -631,6 +657,12 @@ def main() -> int:
         for indices in selected_unit_indices
     ]
     subset_rows = [lean_manifest_record(record) for record in subset]
+    missing_local_audio_paths = sum(
+        1
+        for row in unit_rows
+        for local_path in row.get("local_audio_paths", [])
+        if not local_path
+    )
 
     if args.strict and errors:
         write_jsonl(outputs["errors"], errors)
@@ -663,6 +695,7 @@ def main() -> int:
         "split_names": args.splits,
         "grouping_strategy": args.grouping_strategy,
         "max_audio_reuse": args.max_audio_reuse,
+        "missing_local_audio_paths_in_units": missing_local_audio_paths,
         "total_errors": len(errors),
         **unit_stats,
     }
