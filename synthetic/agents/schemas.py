@@ -1,0 +1,125 @@
+"""Strict JSON schemas for synthetic generation agents."""
+
+from __future__ import annotations
+
+import json
+from typing import Any, Dict, Mapping
+
+
+EXAMPLE_SCHEMA_VERSION = "synthetic_example_v0"
+CLAIM_PROMPT_VERSION = "claim_agent_v0"
+QA_PROMPT_VERSION = "qa_agent_v0"
+VERIFIER_PROMPT_VERSION = "verifier_agent_v1"
+
+CLAIM_TYPES = ["faithful", "counterfactual"]
+CLAIM_STATUSES = ["SUPPORTED", "CONTRADICTED", "PARTIALLY_SUPPORTED"]
+COUNTERFACTUAL_EDIT_TYPES = [
+    "none",
+    "source_swap",
+    "event_swap",
+    "attribute_swap",
+    "false_conjunction",
+    "false_exclusion",
+    "explicit_fact_modification",
+]
+
+EVIDENCE_SOURCE_SCHEMA = {
+    "type": "string",
+    "pattern": "^AUDIO_[1-9][0-9]*$",
+}
+
+CLAIM_OUTPUT_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "claim_text",
+        "claim_type",
+        "claim_status",
+        "evidence_sources",
+        "counterfactual_edit_type",
+        "supporting_caption_phrases",
+        "contradiction_basis",
+        "forbidden_inferences",
+        "confidence",
+    ],
+    "properties": {
+        "claim_text": {"type": "string", "minLength": 1},
+        "claim_type": {"type": "string", "enum": CLAIM_TYPES},
+        "claim_status": {"type": "string", "enum": CLAIM_STATUSES},
+        "evidence_sources": {
+            "type": "array",
+            "items": EVIDENCE_SOURCE_SCHEMA,
+            "uniqueItems": True,
+        },
+        "counterfactual_edit_type": {
+            "type": "string",
+            "enum": COUNTERFACTUAL_EDIT_TYPES,
+        },
+        "supporting_caption_phrases": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "contradiction_basis": {"type": "string"},
+        "forbidden_inferences": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+    },
+}
+
+QA_OUTPUT_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "question",
+        "answer",
+        "answer_source",
+        "claim_evaluation_explanation",
+        "required_evidence_sources",
+    ],
+    "properties": {
+        "question": {"type": "string", "minLength": 1},
+        "answer": {"type": "string", "minLength": 1},
+        "answer_source": {"type": "string", "minLength": 1},
+        "claim_evaluation_explanation": {"type": "string", "minLength": 1},
+        "required_evidence_sources": {
+            "type": "array",
+            "items": EVIDENCE_SOURCE_SCHEMA,
+            "uniqueItems": True,
+        },
+    },
+}
+
+VERIFIER_OUTPUT_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "verifier_status",
+        "validation_errors",
+        "validation_notes",
+        "corrected_claim_status",
+        "corrected_evidence_sources",
+    ],
+    "properties": {
+        "verifier_status": {"type": "string", "enum": ["PASS", "FAIL"]},
+        "validation_errors": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "validation_notes": {"type": "string"},
+        "corrected_claim_status": {
+            "type": ["string", "null"],
+            "enum": ["SUPPORTED", "CONTRADICTED", "PARTIALLY_SUPPORTED", None],
+        },
+        "corrected_evidence_sources": {
+            "type": "array",
+            "items": EVIDENCE_SOURCE_SCHEMA,
+            "uniqueItems": True,
+        },
+    },
+}
+
+
+def schema_json(schema: Mapping[str, Any]) -> str:
+    return json.dumps(dict(schema), ensure_ascii=False, indent=2, sort_keys=True)

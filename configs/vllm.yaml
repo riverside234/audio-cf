@@ -1,0 +1,57 @@
+# Python client config for data_synthetic.py and synthetic/infrastructure/llm_client.py.
+#
+# This file tells the synthetic generation code how to connect to a running
+# OpenAI-compatible vLLM server. Use configs/vllm_server.yaml for:
+#
+#   vllm serve --config configs/vllm_server.yaml
+
+client:
+  base_url: "http://localhost:8000/v1"
+  api_key: "EMPTY"
+  model: "replace-with-served-model-name"
+  timeout_s: 120
+  client_max_inflight_requests: 16
+  verify_ssl: true
+
+generation:
+  response_format:
+    type: "json_object"
+  default:
+    temperature: 0.2
+    top_p: 0.95
+    max_tokens: 512
+  claim_agent:
+    temperature: 0.2
+    top_p: 0.95
+    max_tokens: 512
+  qa_agent:
+    temperature: 0.1
+    top_p: 0.90
+    max_tokens: 512
+  verifier_agent:
+    temperature: 0.0
+    top_p: 1.0
+    max_tokens: 512
+
+retry:
+  max_attempts: 3
+  initial_delay_s: 1.0
+  max_delay_s: 30.0
+  backoff_multiplier: 2.0
+  jitter_s: 0.25
+
+agents:
+  run_verifier: false
+  max_validation_attempts: 2
+  condition_sampling:
+    strategy: "cycle"
+    seed: 42
+  prompts:
+    claim_agent: "prompts/synthetic/claim_agent_v0.md"
+    qa_agent: "prompts/synthetic/qa_agent_v0.md"
+    verifier_agent: "prompts/synthetic/verifier_agent_v1.md"
+  prompt_version: "claim_agent_v0+qa_agent_v0"
+
+batching:
+  graph_max_concurrency: 8
+  unit_batch_size: 32

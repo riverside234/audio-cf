@@ -1,0 +1,53 @@
+# Configuration template for data_process.py.
+# The current script still reads CLI arguments; this file mirrors those defaults
+# and can become the source of truth when config loading is added later.
+# "${cwd}" means the same current-working-directory behavior as os.getcwd().
+
+source:
+  dataset: "clotho"
+  version: "v2.1"
+  zenodo_record_id: "4783391"
+  zenodo_record_url: "https://zenodo.org/records/4783391"
+  doi: "10.5281/zenodo.4783391"
+  doi_url: "https://doi.org/10.5281/zenodo.4783391"
+
+paths:
+  clotho_root: "${cwd}/data"
+  output_dir: "${cwd}/data/log"
+  release_audio_root: "audio/clotho_v2_1"
+  path_mode: "relative"
+
+processing:
+  splits:
+    - "development"
+    - "validation"
+    - "evaluation"
+  extract_archives: true
+  overwrite: false
+  strict: false
+
+expected_files:
+  development:
+    archives:
+      - "clotho_audio_development.7z"
+    captions: "clotho_captions_development.csv"
+    metadata: "clotho_metadata_development.csv"
+  validation:
+    archives:
+      - "clotho_audio_validation.7z"
+    captions: "clotho_captions_validation.csv"
+    metadata: "clotho_metadata_validation.csv"
+  evaluation:
+    archives:
+      - "clotho_audio_evaluation.7z"
+      - "clotho_audio_evalution.7z"
+    captions: "clotho_captions_evaluation.csv"
+    metadata: "clotho_metadata_evaluation.csv"
+
+outputs:
+  manifest_jsonl: "full_manifest.jsonl"
+  manifest_parquet: "full_manifest.parquet"
+  provenance_parquet: "full_manifest_provenance.parquet"
+  config_used: "process_config_used.yaml"
+  stats: "process_stats.json"
+  errors: "process_errors.jsonl"

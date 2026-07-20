@@ -1,0 +1,51 @@
+# Configuration template for data_filter.py.
+# The current script still reads CLI arguments; this file mirrors those defaults
+# and can become the source of truth when config loading is added later.
+# "${cwd}" means the same current-working-directory behavior as os.getcwd().
+
+input:
+  manifest_path: "${cwd}/data/log/full_manifest.parquet"
+  splits:
+    - "development"
+
+output:
+  output_dir: "${cwd}/data/final"
+  subset_jsonl: "subset_manifest.jsonl"
+  subset_parquet: "subset_manifest.parquet"
+  audio_units_jsonl: "audio_units.jsonl"
+  audio_units_parquet: "audio_units.parquet"
+  config_used: "filter_config_used.yaml"
+  stats: "filter_stats.json"
+  errors: "filter_errors.jsonl"
+
+sampling:
+  subset_size: 40
+  unit_count: 20
+  audio_count: 2
+  random_seed: 42
+  grouping_strategy: "random"
+  max_audio_reuse: null
+  max_enumerated_units: 2000000
+
+similarity:
+  similarity_min: 0.10
+  similarity_max: 1.00
+  dissimilarity_max: 0.05
+
+schema:
+  grounding_standard: "caption_grounded"
+  unit_schema_version: "audio_unit_manifest_v1"
+  fallback_release_audio_root: "audio/clotho_v2_1"
+  required_unit_columns:
+    - "unit_id"
+    - "schema_version"
+    - "grounding_standard"
+    - "audio_count"
+    - "audio_ids"
+    - "local_audio_paths"
+    - "audio_file_names"
+    - "audio_captions"
+
+runtime:
+  overwrite: false
+  strict: false

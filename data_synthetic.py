@@ -1,0 +1,760 @@
+#!/usr/bin/env python3
+"""Run caption-grounded synthetic data generation.
+
+This file is intentionally a thin CLI entrypoint:
+
+    audio_units.parquet/jsonl -> agents graph -> examples.parquet/jsonl
+
+Agent behavior, schemas, prompt rendering, model calls, retry, and dataset IO live
+under synthetic/. This script only loads config, wires dependencies, and writes
+run artifacts.
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import os
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+
+from synthetic.agents import (
+    ClaimAgent,
+    QAAgent,
+    TargetConditionSampler,
+    VerifierAgent,
+    build_graph,
+)
+from synthetic.infrastructure.dataset_io import (
+    batched,
+    load_rows,
+    validate_audio_unit_rows,
+    write_json,
+    write_jsonl,
+    write_parquet,
+)
+from synthetic.infrastructure.llm_client import LLMClientConfig, VLLMClient
+from synthetic.infrastructure.retry import RetryConfig
+from synthetic.infrastructure.run_logger import RunLogger, utc_now
+
+
+DEFAULT_CONFIG_PATH = Path("configs/data_synthetic.yaml")
+DEFAULT_VLLM_CONFIG_PATH = Path("configs/vllm.yaml")
+
+
+@dataclass(frozen=True)
+class OutputPaths:
+    output_dir: Path
+    examples_parquet: Path
+    examples_jsonl: Path
+    examples_audit_parquet: Path
+    sample_for_human_review_jsonl: Path
+    generation_config_used: Path
+    stats: Path
+    errors_jsonl: Path
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Generate synthetic claim/question/answer examples from audio units."
+    )
+    parser.add_argument(
+        "--config",
+        default=str(DEFAULT_CONFIG_PATH),
+        help="Path to configs/data_synthetic.yaml.",
+    )
+    parser.add_argument(
+        "--vllm-config",
+        default=None,
+        help="Optional override for the Python vLLM client config.",
+    )
+    parser.add_argument(
+        "--input-path",
+        default=None,
+        help="Optional override for input audio_units parquet/jsonl path.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default=None,
+        help="Optional override for synthetic output directory.",
+    )
+    parser.add_argument(
+        "--start-index",
+        type=int,
+        default=None,
+        help="Optional override for the first input row index to process.",
+    )
+    parser.add_argument(
+        "--max-units",
+        type=int,
+        default=None,
+        help="Optional limit on number of audio units to process.",
+    )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Overwrite existing generation outputs.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Load configs/prompts/input rows and exit before contacting vLLM.",
+    )
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    try:
+        config_path = resolve_path(args.config, Path.cwd())
+        config = load_yaml(config_path)
+        config = expand_placeholders(config, Path.cwd())
+        apply_cli_overrides(config, args)
+
+        vllm_config_path = resolve_path(
+            args.vllm_config or get_nested(
+                config,
+                ["vllm", "config_path"],
+                str(DEFAULT_VLLM_CONFIG_PATH),
+            ),
+            Path.cwd(),
+        )
+        vllm_config = expand_placeholders(load_yaml(vllm_config_path), Path.cwd())
+
+        return asyncio.run(
+            run_generation(
+                config=config,
+                vllm_config=vllm_config,
+                config_path=config_path,
+                vllm_config_path=vllm_config_path,
+            )
+        )
+    except KeyboardInterrupt:
+        print("Interrupted.", file=sys.stderr)
+        return 130
+    except Exception as exc:  # noqa: BLE001 - CLI should report a clear failure.
+        print(f"data_synthetic.py failed: {exc}", file=sys.stderr)
+        return 1
+
+
+async def run_generation(
+    config: Mapping[str, Any],
+    vllm_config: Mapping[str, Any],
+    config_path: Path,
+    vllm_config_path: Path,
+) -> int:
+    input_path = resolve_path(get_nested(config, ["input", "audio_units_path"]), Path.cwd())
+    start_index = int(get_nested(config, ["input", "start_index"], 0) or 0)
+    max_units = optional_int(get_nested(config, ["input", "max_units"], None))
+    dry_run = bool(get_nested(config, ["run", "dry_run"], False))
+    fail_fast = bool(get_nested(config, ["run", "fail_fast"], False))
+    continue_on_error = bool(get_nested(config, ["run", "continue_on_error"], True))
+    overwrite = bool(get_nested(config, ["output", "overwrite"], False))
+    run_name = optional_str(get_nested(config, ["run", "run_name"], None))
+
+    if start_index < 0:
+        raise ValueError("input.start_index must be >= 0.")
+    if max_units is not None and max_units < 1:
+        raise ValueError("input.max_units must be null or >= 1.")
+
+    output_paths = build_output_paths(config)
+    output_paths.output_dir.mkdir(parents=True, exist_ok=True)
+    output_files = expected_output_files(output_paths, config)
+    assert_outputs_writable(output_files, overwrite)
+    clear_existing_outputs(output_files, overwrite)
+    logger = RunLogger(output_paths.output_dir, run_name=run_name)
+    logger.log_event(
+        "generation_started",
+        {
+            "config_path": str(config_path),
+            "vllm_config_path": str(vllm_config_path),
+            "input_path": str(input_path),
+            "dry_run": dry_run,
+        },
+    )
+
+    rows = load_rows(input_path)
+    validate_audio_unit_rows(rows)
+    selected_rows = select_rows(rows, start_index=start_index, max_units=max_units)
+    if not selected_rows:
+        raise ValueError("No audio-unit rows selected for generation.")
+
+    prompt_paths = resolve_prompt_paths(vllm_config)
+    check_prompt_paths(prompt_paths)
+    write_config_used(
+        output_paths.generation_config_used,
+        config=config,
+        vllm_config=vllm_config,
+        config_path=config_path,
+        vllm_config_path=vllm_config_path,
+    )
+
+    if dry_run:
+        stats = build_stats(
+            config=config,
+            vllm_config=vllm_config,
+            input_rows_loaded=len(rows),
+            selected_units=len(selected_rows),
+            examples_written=0,
+            errors_written=0,
+            dry_run=True,
+            start_index=start_index,
+            max_units=max_units,
+        )
+        write_json(output_paths.stats, stats)
+        write_jsonl(output_paths.errors_jsonl, [])
+        logger.write_stats(stats)
+        logger.log_event("dry_run_completed", stats)
+        print(
+            f"Dry run OK: loaded {len(rows)} rows, selected {len(selected_rows)} rows."
+        )
+        return 0
+
+    retry_config = build_retry_config(vllm_config)
+    llm_client_config = build_llm_client_config(vllm_config)
+    batch_size = int(get_nested(vllm_config, ["batching", "unit_batch_size"], 32) or 32)
+    if batch_size < 1:
+        raise ValueError("batching.unit_batch_size must be >= 1.")
+
+    examples: List[Dict[str, Any]] = []
+    audit_rows: List[Dict[str, Any]] = []
+    error_rows: List[Dict[str, Any]] = []
+
+    async with VLLMClient(llm_client_config) as llm_client:
+        graph = build_configured_graph(
+            llm_client=llm_client,
+            retry_config=retry_config,
+            vllm_config=vllm_config,
+            prompt_paths=prompt_paths,
+        )
+        absolute_index = start_index
+        for batch in batched(selected_rows, batch_size):
+            logger.log_event(
+                "batch_started",
+                {"start_index": absolute_index, "batch_size": len(batch)},
+            )
+            states, batch_errors = await run_batch(
+                graph=graph,
+                rows=batch,
+                start_index=absolute_index,
+                fail_fast=fail_fast,
+                continue_on_error=continue_on_error,
+            )
+            for state in states:
+                if state.final_example is not None:
+                    examples.append(dict(state.final_example))
+                audit_rows.append(build_audit_row(state))
+            error_rows.extend(batch_errors)
+            logger.log_event(
+                "batch_completed",
+                {
+                    "start_index": absolute_index,
+                    "batch_size": len(batch),
+                    "examples_total": len(examples),
+                    "errors_total": len(error_rows),
+                },
+            )
+            absolute_index += len(batch)
+
+    write_outputs(
+        output_paths=output_paths,
+        config=config,
+        examples=examples,
+        audit_rows=audit_rows,
+        error_rows=error_rows,
+    )
+    stats = build_stats(
+        config=config,
+        vllm_config=vllm_config,
+        input_rows_loaded=len(rows),
+        selected_units=len(selected_rows),
+        examples_written=len(examples),
+        errors_written=len(error_rows),
+        dry_run=False,
+        start_index=start_index,
+        max_units=max_units,
+    )
+    write_json(output_paths.stats, stats)
+    logger.write_stats(stats)
+    logger.log_event("generation_completed", stats)
+
+    print(f"Wrote {len(examples)} examples to {output_paths.examples_parquet}")
+    if error_rows:
+        print(f"Recorded {len(error_rows)} generation errors in {output_paths.errors_jsonl}")
+    return 0 if examples or not error_rows else 1
+
+
+def build_configured_graph(
+    llm_client: VLLMClient,
+    retry_config: RetryConfig,
+    vllm_config: Mapping[str, Any],
+    prompt_paths: Mapping[str, Path],
+) -> Any:
+    agents_config = dict(get_nested(vllm_config, ["agents"], {}) or {})
+    generation_model = str(get_nested(vllm_config, ["client", "model"], ""))
+    prompt_version = str(agents_config.get("prompt_version", "claim_agent_v0+qa_agent_v0"))
+    run_verifier = bool(agents_config.get("run_verifier", False))
+    max_validation_attempts = int(agents_config.get("max_validation_attempts", 2) or 2)
+
+    condition_config = dict(agents_config.get("condition_sampling") or {})
+    condition_sampler = TargetConditionSampler(
+        seed=int(condition_config.get("seed", 42) or 42),
+        strategy=str(condition_config.get("strategy", "cycle")),
+    )
+
+    claim_settings = generation_settings(vllm_config, "claim_agent")
+    qa_settings = generation_settings(vllm_config, "qa_agent")
+    verifier_settings = generation_settings(vllm_config, "verifier_agent")
+
+    claim_agent = ClaimAgent(
+        llm_client=llm_client,
+        prompt_path=prompt_paths["claim_agent"],
+        retry_config=retry_config,
+        temperature=claim_settings.get("temperature"),
+        top_p=claim_settings.get("top_p"),
+        max_tokens=claim_settings.get("max_tokens"),
+    )
+    qa_agent = QAAgent(
+        llm_client=llm_client,
+        prompt_path=prompt_paths["qa_agent"],
+        retry_config=retry_config,
+        temperature=qa_settings.get("temperature"),
+        top_p=qa_settings.get("top_p"),
+        max_tokens=qa_settings.get("max_tokens"),
+    )
+
+    verifier_agent: Optional[VerifierAgent] = None
+    if run_verifier:
+        verifier_agent = VerifierAgent(
+            llm_client=llm_client,
+            prompt_path=prompt_paths["verifier_agent"],
+            retry_config=retry_config,
+            temperature=verifier_settings.get("temperature"),
+            top_p=verifier_settings.get("top_p"),
+            max_tokens=verifier_settings.get("max_tokens"),
+        )
+
+    return build_graph(
+        claim_agent=claim_agent,
+        qa_agent=qa_agent,
+        verifier_agent=verifier_agent,
+        condition_sampler=condition_sampler,
+        run_verifier=run_verifier,
+        max_validation_attempts=max_validation_attempts,
+        max_concurrency=int(
+            get_nested(vllm_config, ["batching", "graph_max_concurrency"], 8) or 8
+        ),
+        generation_model=generation_model,
+        prompt_version=prompt_version,
+    )
+
+
+async def run_batch(
+    graph: Any,
+    rows: Sequence[Mapping[str, Any]],
+    start_index: int,
+    fail_fast: bool,
+    continue_on_error: bool,
+) -> Tuple[List[Any], List[Dict[str, Any]]]:
+    semaphore = asyncio.Semaphore(int(graph.max_concurrency))
+
+    async def run_one(offset: int, row: Mapping[str, Any]) -> Any:
+        async with semaphore:
+            return await graph.run_unit(row, unit_index=start_index + offset)
+
+    tasks = [run_one(offset, row) for offset, row in enumerate(rows)]
+    if fail_fast or not continue_on_error:
+        states = await asyncio.gather(*tasks)
+        return list(states), []
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    states: List[Any] = []
+    errors: List[Dict[str, Any]] = []
+    for offset, result in enumerate(results):
+        unit = rows[offset]
+        if isinstance(result, Exception):
+            errors.append(
+                {
+                    "timestamp": utc_now(),
+                    "stage": "generation",
+                    "unit_index": start_index + offset,
+                    "unit_id": unit.get("unit_id", ""),
+                    "error_type": type(result).__name__,
+                    "message": str(result),
+                }
+            )
+        else:
+            states.append(result)
+    return states, errors
+
+
+def build_audit_row(state: Any) -> Dict[str, Any]:
+    final_example = state.final_example or {}
+    return {
+        "example_id": final_example.get("example_id", ""),
+        "unit_id": state.unit_record.get("unit_id", ""),
+        "audio_count": state.unit_record.get("audio_count", 0),
+        "target_condition": state.target_condition,
+        "claim_record": state.claim_record,
+        "qa_record": state.qa_record,
+        "verifier_record": state.verifier_record,
+        "validation_errors": list(state.validation_errors),
+        "raw_claim_text": state.raw_claim_text,
+        "raw_qa_text": state.raw_qa_text,
+        "raw_verifier_text": state.raw_verifier_text,
+    }
+
+
+def write_outputs(
+    output_paths: OutputPaths,
+    config: Mapping[str, Any],
+    examples: Sequence[Dict[str, Any]],
+    audit_rows: Sequence[Dict[str, Any]],
+    error_rows: Sequence[Dict[str, Any]],
+) -> None:
+    write_parquet_enabled = bool(get_nested(config, ["output", "write_parquet"], True))
+    write_jsonl_enabled = bool(get_nested(config, ["output", "write_jsonl"], True))
+    write_audit_enabled = bool(get_nested(config, ["output", "write_audit"], True))
+    review_sample_size = int(
+        get_nested(config, ["output", "review_sample_size"], 100) or 100
+    )
+
+    if write_parquet_enabled and examples:
+        write_parquet(output_paths.examples_parquet, examples)
+    if write_jsonl_enabled:
+        write_jsonl(output_paths.examples_jsonl, examples)
+    if write_audit_enabled and audit_rows:
+        write_parquet(output_paths.examples_audit_parquet, audit_rows)
+        write_jsonl(
+            output_paths.sample_for_human_review_jsonl,
+            list(audit_rows)[:review_sample_size],
+        )
+    write_jsonl(output_paths.errors_jsonl, error_rows)
+
+
+def build_stats(
+    config: Mapping[str, Any],
+    vllm_config: Mapping[str, Any],
+    input_rows_loaded: int,
+    selected_units: int,
+    examples_written: int,
+    errors_written: int,
+    dry_run: bool,
+    start_index: int,
+    max_units: Optional[int],
+) -> Dict[str, Any]:
+    return {
+        "timestamp": utc_now(),
+        "dry_run": dry_run,
+        "input_rows_loaded": input_rows_loaded,
+        "selected_units": selected_units,
+        "start_index": start_index,
+        "max_units": max_units,
+        "examples_written": examples_written,
+        "errors_written": errors_written,
+        "generation_model": get_nested(vllm_config, ["client", "model"], ""),
+        "run_verifier": bool(get_nested(vllm_config, ["agents", "run_verifier"], False)),
+        "prompt_version": get_nested(
+            vllm_config,
+            ["agents", "prompt_version"],
+            "claim_agent_v0+qa_agent_v0",
+        ),
+        "graph_max_concurrency": get_nested(
+            vllm_config,
+            ["batching", "graph_max_concurrency"],
+            8,
+        ),
+        "unit_batch_size": get_nested(vllm_config, ["batching", "unit_batch_size"], 32),
+        "output_dir": get_nested(config, ["output", "output_dir"], ""),
+    }
+
+
+def build_llm_client_config(vllm_config: Mapping[str, Any]) -> LLMClientConfig:
+    client_config = dict(get_nested(vllm_config, ["client"], {}) or {})
+    default_generation = generation_settings(vllm_config, "default")
+    response_format = get_nested(vllm_config, ["generation", "response_format"], None)
+
+    return LLMClientConfig(
+        base_url=str(client_config.get("base_url", "http://localhost:8000/v1")),
+        model=str(client_config.get("model", "")),
+        api_key=str(client_config.get("api_key", "EMPTY")),
+        temperature=float(default_generation.get("temperature", 0.2)),
+        top_p=float(default_generation.get("top_p", 0.95)),
+        max_tokens=int(default_generation.get("max_tokens", 512)),
+        timeout_s=float(client_config.get("timeout_s", 120)),
+        client_max_inflight_requests=int(
+            client_config.get("client_max_inflight_requests", 16)
+        ),
+        response_format=dict(response_format) if isinstance(response_format, dict) else None,
+        extra_body=dict(client_config.get("extra_body") or {}),
+        extra_headers=dict(client_config.get("extra_headers") or {}),
+        verify_ssl=bool(client_config.get("verify_ssl", True)),
+    )
+
+
+def build_retry_config(vllm_config: Mapping[str, Any]) -> RetryConfig:
+    retry_config = dict(get_nested(vllm_config, ["retry"], {}) or {})
+    return RetryConfig(
+        max_attempts=int(retry_config.get("max_attempts", 3)),
+        initial_delay_s=float(retry_config.get("initial_delay_s", 1.0)),
+        max_delay_s=float(retry_config.get("max_delay_s", 30.0)),
+        backoff_multiplier=float(retry_config.get("backoff_multiplier", 2.0)),
+        jitter_s=float(retry_config.get("jitter_s", 0.25)),
+    )
+
+
+def generation_settings(
+    vllm_config: Mapping[str, Any],
+    agent_name: str,
+) -> Dict[str, Any]:
+    generation = dict(get_nested(vllm_config, ["generation"], {}) or {})
+    defaults = dict(generation.get("default") or {})
+    overrides = dict(generation.get(agent_name) or {})
+    return {**defaults, **overrides}
+
+
+def build_output_paths(config: Mapping[str, Any]) -> OutputPaths:
+    output_dir = resolve_path(get_nested(config, ["output", "output_dir"]), Path.cwd())
+    return OutputPaths(
+        output_dir=output_dir,
+        examples_parquet=output_dir
+        / str(get_nested(config, ["output", "examples_parquet"], "examples.parquet")),
+        examples_jsonl=output_dir
+        / str(get_nested(config, ["output", "examples_jsonl"], "examples.jsonl")),
+        examples_audit_parquet=output_dir
+        / str(
+            get_nested(
+                config,
+                ["output", "examples_audit_parquet"],
+                "examples_audit.parquet",
+            )
+        ),
+        sample_for_human_review_jsonl=output_dir
+        / str(
+            get_nested(
+                config,
+                ["output", "sample_for_human_review_jsonl"],
+                "sample_for_human_review.jsonl",
+            )
+        ),
+        generation_config_used=output_dir
+        / str(
+            get_nested(
+                config,
+                ["output", "generation_config_used"],
+                "generation_config_used.yaml",
+            )
+        ),
+        stats=output_dir / str(get_nested(config, ["output", "stats"], "stats.json")),
+        errors_jsonl=output_dir
+        / str(get_nested(config, ["output", "errors_jsonl"], "errors.jsonl")),
+    )
+
+
+def expected_output_files(
+    output_paths: OutputPaths,
+    config: Mapping[str, Any],
+) -> List[Path]:
+    paths: List[Path] = [
+        output_paths.generation_config_used,
+        output_paths.stats,
+        output_paths.errors_jsonl,
+        output_paths.output_dir / "events.jsonl",
+    ]
+    if bool(get_nested(config, ["output", "write_parquet"], True)):
+        paths.append(output_paths.examples_parquet)
+    if bool(get_nested(config, ["output", "write_jsonl"], True)):
+        paths.append(output_paths.examples_jsonl)
+    if bool(get_nested(config, ["output", "write_audit"], True)):
+        paths.extend(
+            [
+                output_paths.examples_audit_parquet,
+                output_paths.sample_for_human_review_jsonl,
+            ]
+        )
+    return paths
+
+
+def assert_outputs_writable(paths: Sequence[Path], overwrite: bool) -> None:
+    existing = [path for path in paths if path.exists()]
+    if existing and not overwrite:
+        formatted = "\n".join(str(path) for path in existing)
+        raise FileExistsError(
+            "Generation outputs already exist. Re-run with --overwrite or set "
+            f"output.overwrite: true.\n{formatted}"
+        )
+
+
+def clear_existing_outputs(paths: Sequence[Path], overwrite: bool) -> None:
+    if not overwrite:
+        return
+    for path in paths:
+        if path.exists() and path.is_file():
+            path.unlink()
+
+
+def resolve_prompt_paths(vllm_config: Mapping[str, Any]) -> Dict[str, Path]:
+    prompts = dict(get_nested(vllm_config, ["agents", "prompts"], {}) or {})
+    return {
+        "claim_agent": resolve_path(
+            prompts.get("claim_agent", "prompts/synthetic/claim_agent_v0.md"),
+            Path.cwd(),
+        ),
+        "qa_agent": resolve_path(
+            prompts.get("qa_agent", "prompts/synthetic/qa_agent_v0.md"),
+            Path.cwd(),
+        ),
+        "verifier_agent": resolve_path(
+            prompts.get("verifier_agent", "prompts/synthetic/verifier_agent_v1.md"),
+            Path.cwd(),
+        ),
+    }
+
+
+def check_prompt_paths(prompt_paths: Mapping[str, Path]) -> None:
+    missing = [f"{name}: {path}" for name, path in prompt_paths.items() if not path.exists()]
+    if missing:
+        raise FileNotFoundError("Missing prompt files:\n" + "\n".join(missing))
+
+
+def select_rows(
+    rows: Sequence[Dict[str, Any]],
+    start_index: int,
+    max_units: Optional[int],
+) -> List[Dict[str, Any]]:
+    if start_index >= len(rows):
+        return []
+    end_index = None if max_units is None else start_index + max_units
+    return list(rows[start_index:end_index])
+
+
+def write_config_used(
+    path: Path,
+    config: Mapping[str, Any],
+    vllm_config: Mapping[str, Any],
+    config_path: Path,
+    vllm_config_path: Path,
+) -> None:
+    payload = {
+        "config_path": str(config_path),
+        "vllm_config_path": str(vllm_config_path),
+        "data_synthetic_config": config,
+        "vllm_config": redact_secrets(vllm_config),
+    }
+    dump_yaml(path, payload)
+
+
+def apply_cli_overrides(config: Dict[str, Any], args: argparse.Namespace) -> None:
+    if args.input_path is not None:
+        set_nested(config, ["input", "audio_units_path"], args.input_path)
+    if args.output_dir is not None:
+        set_nested(config, ["output", "output_dir"], args.output_dir)
+    if args.start_index is not None:
+        set_nested(config, ["input", "start_index"], args.start_index)
+    if args.max_units is not None:
+        set_nested(config, ["input", "max_units"], args.max_units)
+    if args.overwrite:
+        set_nested(config, ["output", "overwrite"], True)
+    if args.dry_run:
+        set_nested(config, ["run", "dry_run"], True)
+
+
+def load_yaml(path: Path) -> Dict[str, Any]:
+    try:
+        import yaml  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "PyYAML is required to load config files. Install it with `pip install PyYAML`."
+        ) from exc
+
+    with path.open("r", encoding="utf-8") as handle:
+        payload = yaml.safe_load(handle) or {}
+    if not isinstance(payload, dict):
+        raise ValueError(f"{path} must contain a YAML mapping.")
+    return dict(payload)
+
+
+def dump_yaml(path: Path, payload: Mapping[str, Any]) -> None:
+    try:
+        import yaml  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "PyYAML is required to write generation_config_used.yaml."
+        ) from exc
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        yaml.safe_dump(dict(payload), handle, sort_keys=False, allow_unicode=False)
+
+
+def expand_placeholders(value: Any, cwd: Path) -> Any:
+    if isinstance(value, str):
+        expanded = value.replace("${cwd}", str(cwd))
+        return os.path.expandvars(expanded)
+    if isinstance(value, list):
+        return [expand_placeholders(item, cwd) for item in value]
+    if isinstance(value, dict):
+        return {key: expand_placeholders(item, cwd) for key, item in value.items()}
+    return value
+
+
+def resolve_path(value: Any, cwd: Path) -> Path:
+    if value is None:
+        raise ValueError("Path value cannot be null.")
+    path = Path(str(value))
+    if path.is_absolute():
+        return path
+    return cwd / path
+
+
+def get_nested(
+    payload: Mapping[str, Any],
+    keys: Sequence[str],
+    default: Any = None,
+) -> Any:
+    current: Any = payload
+    for key in keys:
+        if not isinstance(current, Mapping) or key not in current:
+            return default
+        current = current[key]
+    return current
+
+
+def set_nested(payload: Dict[str, Any], keys: Sequence[str], value: Any) -> None:
+    current = payload
+    for key in keys[:-1]:
+        child = current.get(key)
+        if not isinstance(child, dict):
+            child = {}
+            current[key] = child
+        current = child
+    current[keys[-1]] = value
+
+
+def optional_int(value: Any) -> Optional[int]:
+    if value is None or value == "":
+        return None
+    return int(value)
+
+
+def optional_str(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value)
+    return text if text else None
+
+
+def redact_secrets(payload: Mapping[str, Any]) -> Dict[str, Any]:
+    redacted = dict(payload)
+    client = redacted.get("client")
+    if isinstance(client, dict) and client.get("api_key") not in {None, "", "EMPTY"}:
+        client = dict(client)
+        client["api_key"] = "<redacted>"
+        redacted["client"] = client
+    return redacted
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

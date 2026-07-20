@@ -1,0 +1,33 @@
+# CLI-style config for:
+#
+#   vllm serve --config configs/vllm_server.yaml
+#
+# vLLM expects long argument names as top-level YAML keys. Keep this separate
+# from configs/vllm.yaml, which is for the Python synthetic-generation client.
+
+model: "replace-with-local-model-name-or-path"
+served-model-name: "replace-with-served-model-name"
+
+host: "0.0.0.0"
+port: 8000
+uvicorn-log-level: "info"
+
+dtype: "bfloat16"
+max-model-len: 8192
+gpu-memory-utilization: 0.90
+max-num-seqs: 64
+max-num-batched-tokens: 16384
+
+enable-prefix-caching: true
+enable-chunked-prefill: true
+
+# Single-GPU default. Increase only if you intentionally use tensor parallelism.
+tensor-parallel-size: 1
+
+# Uncomment on the lab machine if you want Hugging Face downloads/cache in a
+# specific storage location.
+# download-dir: "/path/to/huggingface/cache"
+
+# Some models require this, but leave it disabled unless the model card says it
+# is needed.
+# trust-remote-code: false

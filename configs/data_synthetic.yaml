@@ -1,0 +1,31 @@
+# Configuration template for data_synthetic.py.
+# "${cwd}" means the current working directory where the script is launched.
+
+input:
+  audio_units_path: "${cwd}/data/final/audio_units.parquet"
+  start_index: 0
+  max_units: null
+
+output:
+  output_dir: "${cwd}/data/synthetic/clotho_audio_units_v0"
+  examples_parquet: "examples.parquet"
+  examples_jsonl: "examples.jsonl"
+  examples_audit_parquet: "examples_audit.parquet"
+  sample_for_human_review_jsonl: "sample_for_human_review.jsonl"
+  generation_config_used: "generation_config_used.yaml"
+  stats: "stats.json"
+  errors_jsonl: "errors.jsonl"
+  write_parquet: true
+  write_jsonl: true
+  write_audit: true
+  review_sample_size: 100
+  overwrite: false
+
+vllm:
+  config_path: "${cwd}/configs/vllm.yaml"
+
+run:
+  dry_run: false
+  fail_fast: false
+  continue_on_error: true
+  run_name: null
