@@ -23,6 +23,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 from synthetic.agents import (
     ClaimAgent,
     QAAgent,
+    ReasoningPolicy,
     TargetConditionSampler,
     VerifierAgent,
     build_graph,
@@ -307,6 +308,7 @@ def build_configured_graph(
     claim_settings = generation_settings(vllm_config, "claim_agent")
     qa_settings = generation_settings(vllm_config, "qa_agent")
     verifier_settings = generation_settings(vllm_config, "verifier_agent")
+    reasoning_policy = build_reasoning_policy(vllm_config)
 
     claim_agent = ClaimAgent(
         llm_client=llm_client,
@@ -315,6 +317,7 @@ def build_configured_graph(
         temperature=claim_settings.get("temperature"),
         top_p=claim_settings.get("top_p"),
         max_tokens=claim_settings.get("max_tokens"),
+        reasoning_policy=reasoning_policy,
     )
     qa_agent = QAAgent(
         llm_client=llm_client,
@@ -323,6 +326,7 @@ def build_configured_graph(
         temperature=qa_settings.get("temperature"),
         top_p=qa_settings.get("top_p"),
         max_tokens=qa_settings.get("max_tokens"),
+        reasoning_policy=reasoning_policy,
     )
 
     verifier_agent: Optional[VerifierAgent] = None
@@ -334,6 +338,7 @@ def build_configured_graph(
             temperature=verifier_settings.get("temperature"),
             top_p=verifier_settings.get("top_p"),
             max_tokens=verifier_settings.get("max_tokens"),
+            reasoning_policy=reasoning_policy,
         )
 
     return build_graph(
@@ -401,6 +406,7 @@ def build_audit_row(state: Any) -> Dict[str, Any]:
         "qa_record": state.qa_record,
         "verifier_record": state.verifier_record,
         "validation_errors": list(state.validation_errors),
+        "visible_reasoning_stripped": list(state.visible_reasoning_stripped),
         "raw_claim_text": state.raw_claim_text,
         "raw_qa_text": state.raw_qa_text,
         "raw_verifier_text": state.raw_verifier_text,
@@ -456,6 +462,40 @@ def build_stats(
         "errors_written": errors_written,
         "generation_model": get_nested(vllm_config, ["client", "model"], ""),
         "run_verifier": bool(get_nested(vllm_config, ["agents", "run_verifier"], False)),
+        "reasoning_enabled": bool(
+            get_nested(vllm_config, ["generation", "reasoning", "enabled"], True)
+        ),
+        "reasoning_mode": get_nested(
+            vllm_config,
+            ["generation", "reasoning", "mode"],
+            "private_json",
+        ),
+        "reasoning_effort": get_nested(
+            vllm_config,
+            ["generation", "reasoning", "effort"],
+            "medium",
+        ),
+        "include_reasoning": bool(
+            get_nested(
+                vllm_config,
+                ["generation", "reasoning", "include_reasoning"],
+                False,
+            )
+        ),
+        "strip_visible_reasoning": bool(
+            get_nested(
+                vllm_config,
+                ["generation", "reasoning", "strip_visible_reasoning"],
+                True,
+            )
+        ),
+        "reject_visible_reasoning": bool(
+            get_nested(
+                vllm_config,
+                ["generation", "reasoning", "reject_visible_reasoning"],
+                False,
+            )
+        ),
         "prompt_version": get_nested(
             vllm_config,
             ["agents", "prompt_version"],
@@ -475,6 +515,7 @@ def build_llm_client_config(vllm_config: Mapping[str, Any]) -> LLMClientConfig:
     client_config = dict(get_nested(vllm_config, ["client"], {}) or {})
     default_generation = generation_settings(vllm_config, "default")
     response_format = get_nested(vllm_config, ["generation", "response_format"], None)
+    extra_body = build_request_extra_body(vllm_config, client_config)
 
     return LLMClientConfig(
         base_url=str(client_config.get("base_url", "http://localhost:8000/v1")),
@@ -488,7 +529,7 @@ def build_llm_client_config(vllm_config: Mapping[str, Any]) -> LLMClientConfig:
             client_config.get("client_max_inflight_requests", 16)
         ),
         response_format=dict(response_format) if isinstance(response_format, dict) else None,
-        extra_body=dict(client_config.get("extra_body") or {}),
+        extra_body=extra_body,
         extra_headers=dict(client_config.get("extra_headers") or {}),
         verify_ssl=bool(client_config.get("verify_ssl", True)),
     )
@@ -513,6 +554,48 @@ def generation_settings(
     defaults = dict(generation.get("default") or {})
     overrides = dict(generation.get(agent_name) or {})
     return {**defaults, **overrides}
+
+
+def build_reasoning_policy(vllm_config: Mapping[str, Any]) -> ReasoningPolicy:
+    generation = dict(get_nested(vllm_config, ["generation"], {}) or {})
+    reasoning = dict(generation.get("reasoning") or {})
+    instruction = str(reasoning.get("instruction") or "").strip()
+
+    return ReasoningPolicy(
+        enabled=bool(reasoning.get("enabled", True)),
+        mode=str(reasoning.get("mode") or "private_json"),
+        instruction=instruction,
+        effort=str(reasoning.get("effort") or "medium"),
+        strip_visible_reasoning=bool(reasoning.get("strip_visible_reasoning", True)),
+        reject_visible_reasoning=bool(reasoning.get("reject_visible_reasoning", False)),
+    )
+
+
+def build_request_extra_body(
+    vllm_config: Mapping[str, Any],
+    client_config: Mapping[str, Any],
+) -> Dict[str, Any]:
+    extra_body = dict(client_config.get("extra_body") or {})
+    generation = dict(get_nested(vllm_config, ["generation"], {}) or {})
+    reasoning = dict(generation.get("reasoning") or {})
+
+    if not reasoning:
+        return extra_body
+
+    enabled = bool(reasoning.get("enabled", True))
+    effort = str(reasoning.get("effort") or "medium").strip().lower()
+    include_reasoning = bool(reasoning.get("include_reasoning", False))
+
+    allowed_efforts = {"none", "low", "medium", "high"}
+    if effort not in allowed_efforts:
+        raise ValueError(
+            "generation.reasoning.effort must be one of "
+            f"{sorted(allowed_efforts)}, got {effort!r}."
+        )
+
+    extra_body.setdefault("reasoning_effort", effort if enabled else "none")
+    extra_body.setdefault("include_reasoning", include_reasoning)
+    return extra_body
 
 
 def build_output_paths(config: Mapping[str, Any]) -> OutputPaths:

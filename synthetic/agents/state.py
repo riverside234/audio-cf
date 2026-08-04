@@ -24,6 +24,7 @@ class SyntheticGraphState:
     raw_claim_text: Optional[str] = None
     raw_qa_text: Optional[str] = None
     raw_verifier_text: Optional[str] = None
+    visible_reasoning_stripped: List[str] = field(default_factory=list)
     validation_errors: List[str] = field(default_factory=list)
     retry_count: int = 0
 
@@ -39,6 +40,7 @@ class SyntheticGraphState:
             "raw_claim_text": self.raw_claim_text,
             "raw_qa_text": self.raw_qa_text,
             "raw_verifier_text": self.raw_verifier_text,
+            "visible_reasoning_stripped": list(self.visible_reasoning_stripped),
             "validation_errors": list(self.validation_errors),
             "retry_count": self.retry_count,
         }
@@ -56,6 +58,9 @@ class SyntheticGraphState:
             raw_claim_text=_optional_str(payload.get("raw_claim_text")),
             raw_qa_text=_optional_str(payload.get("raw_qa_text")),
             raw_verifier_text=_optional_str(payload.get("raw_verifier_text")),
+            visible_reasoning_stripped=[
+                str(item) for item in payload.get("visible_reasoning_stripped", [])
+            ],
             validation_errors=[str(item) for item in payload.get("validation_errors", [])],
             retry_count=int(payload.get("retry_count", 0)),
         )

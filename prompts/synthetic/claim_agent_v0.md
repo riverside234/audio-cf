@@ -12,6 +12,9 @@ Target condition:
 Previous validation feedback:
 {validation_feedback}
 
+Reasoning policy:
+{reasoning_instruction}
+
 Output schema:
 {claim_schema_json}
 
@@ -25,5 +28,7 @@ Rules:
 - supporting_caption_phrases must quote or closely copy short phrases from the given captions.
 - Avoid exact counts, temporal order, speaker identity, language, gender, age, location, emotion, and intent unless explicitly stated in captions.
 - Keep claim_text atomic and concise.
+- Use the reasoning policy to check evidence/source consistency before writing the final JSON.
+- If a thinking block is used, put only temporary reasoning inside it and put the final JSON after it.
 - Do not mention Clotho, Freesound, metadata, JSON schema, or that captions were provided.
 - Return one JSON object only. Do not use markdown fences.

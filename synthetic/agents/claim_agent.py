@@ -11,6 +11,7 @@ from synthetic.infrastructure.prompt_loader import PromptTemplate, load_prompt
 from synthetic.infrastructure.retry import RetryConfig
 from synthetic.infrastructure.schema_io import parse_json_object, validate_json
 
+from .reasoning import ReasoningPolicy, prepare_agent_response
 from .schemas import CLAIM_OUTPUT_SCHEMA, CLAIM_PROMPT_VERSION, schema_json
 from .state import SyntheticGraphState, format_audio_context, validation_feedback
 
@@ -27,6 +28,7 @@ class ClaimAgent:
         temperature: Optional[float] = None,
         top_p: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        reasoning_policy: Optional[ReasoningPolicy] = None,
     ):
         self.llm_client = llm_client
         self.prompt_template: PromptTemplate = load_prompt(prompt_path)
@@ -35,6 +37,7 @@ class ClaimAgent:
         self.temperature = temperature
         self.top_p = top_p
         self.max_tokens = max_tokens
+        self.reasoning_policy = reasoning_policy or ReasoningPolicy()
 
     async def generate(self, state: SyntheticGraphState) -> Dict[str, Any]:
         if state.target_condition is None:
@@ -51,6 +54,7 @@ class ClaimAgent:
                 ),
                 "claim_schema_json": schema_json(CLAIM_OUTPUT_SCHEMA),
                 "validation_feedback": validation_feedback(state.validation_errors),
+                "reasoning_instruction": self.reasoning_policy.prompt_text(),
             }
         )
         raw_text = await self.llm_client.chat_text(
@@ -60,7 +64,14 @@ class ClaimAgent:
             max_tokens=self.max_tokens,
             retry_config=self.retry_config,
         )
-        state.raw_claim_text = raw_text
-        payload = parse_json_object(raw_text)
+        clean_text, stripped_reasoning = prepare_agent_response(
+            raw_text,
+            "ClaimAgent",
+            self.reasoning_policy,
+        )
+        if stripped_reasoning:
+            state.visible_reasoning_stripped.append("claim_agent")
+        state.raw_claim_text = clean_text
+        payload = parse_json_object(clean_text)
         validate_json(payload, CLAIM_OUTPUT_SCHEMA)
         return payload

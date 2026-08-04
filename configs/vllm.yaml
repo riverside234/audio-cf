@@ -8,30 +8,48 @@
 client:
   base_url: "http://localhost:8000/v1"
   api_key: "EMPTY"
-  model: "replace-with-served-model-name"
+  model: "gemma4"
   timeout_s: 120
   client_max_inflight_requests: 16
   verify_ssl: true
+  # Optional model/vLLM-specific request fields. Generation reasoning settings
+  # below are merged into this request body by data_synthetic.py.
+  extra_body: {}
 
 generation:
   response_format:
     type: "json_object"
+  reasoning:
+    enabled: true
+    mode: "gemma4_vllm"
+    effort: "medium"
+    include_reasoning: false
+    strip_visible_reasoning: true
+    reject_visible_reasoning: false
+    instruction: >
+      Use Gemma 4 reasoning as configured by vLLM. The runtime may place
+      temporary reasoning in Gemma 4's thought channel, but the final message
+      content must be exactly one JSON object that matches the schema. Do not
+      put final JSON inside a reasoning/thought block. Do not output markdown
+      fences or extra explanation around the final JSON. The pipeline suppresses
+      or strips reasoning before parsing and never stores reasoning in the final
+      dataset.
   default:
     temperature: 0.2
     top_p: 0.95
-    max_tokens: 512
+    max_tokens: 1024
   claim_agent:
     temperature: 0.2
     top_p: 0.95
-    max_tokens: 512
+    max_tokens: 1024
   qa_agent:
     temperature: 0.1
     top_p: 0.90
-    max_tokens: 512
+    max_tokens: 1024
   verifier_agent:
     temperature: 0.0
     top_p: 1.0
-    max_tokens: 512
+    max_tokens: 1024
 
 retry:
   max_attempts: 3
@@ -50,7 +68,7 @@ agents:
     claim_agent: "prompts/synthetic/claim_agent_v0.md"
     qa_agent: "prompts/synthetic/qa_agent_v0.md"
     verifier_agent: "prompts/synthetic/verifier_agent_v1.md"
-  prompt_version: "claim_agent_v0+qa_agent_v0"
+  prompt_version: "claim_agent_v0+qa_agent_v0+gemma4_medium_reasoning_v0"
 
 batching:
   graph_max_concurrency: 8

@@ -5,8 +5,8 @@
 # vLLM expects long argument names as top-level YAML keys. Keep this separate
 # from configs/vllm.yaml, which is for the Python synthetic-generation client.
 
-model: "replace-with-local-model-name-or-path"
-served-model-name: "replace-with-served-model-name"
+model: "/data/not_backed_up/yxu209/models/gemma"
+served-model-name: "gemma4"
 
 host: "0.0.0.0"
 port: 8000
@@ -21,12 +21,24 @@ max-num-batched-tokens: 16384
 enable-prefix-caching: true
 enable-chunked-prefill: true
 
+# Gemma 4 thinking/reasoning parser. Required by vLLM to expose reasoning
+# separately from final message content.
+reasoning-parser: "gemma4"
+
 # Single-GPU default. Increase only if you intentionally use tensor parallelism.
 tensor-parallel-size: 1
 
+# If your vLLM build/model template does not auto-handle Gemma 4 thinking,
+# enable thinking server-wide with:
+# default-chat-template-kwargs: '{"enable_thinking": true}'
+#
+# Some Gemma 4 vLLM recipes also use a custom tool chat template. Only set this
+# after confirming the file exists in your vLLM installation/container.
+# chat-template: "examples/tool_chat_template_gemma4.jinja"
+
 # Uncomment on the lab machine if you want Hugging Face downloads/cache in a
 # specific storage location.
-# download-dir: "/path/to/huggingface/cache"
+download-dir: "/data/not_backed_up/yxu209/huggingface/cache"
 
 # Some models require this, but leave it disabled unless the model card says it
 # is needed.

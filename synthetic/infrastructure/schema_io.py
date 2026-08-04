@@ -9,6 +9,13 @@ from typing import Any, Dict, Mapping
 
 
 JSON_FENCE_RE = re.compile(r"^```(?:json)?\s*(.*?)\s*```$", re.DOTALL)
+VISIBLE_REASONING_RES = [
+    re.compile(r"<think(?:ing)?>.*?</think(?:ing)?>", re.DOTALL | re.IGNORECASE),
+    re.compile(r"<\|think\|>.*?<\|/think\|>", re.DOTALL | re.IGNORECASE),
+    re.compile(r"<\|channel>thought\s*.*?<channel\|>", re.DOTALL | re.IGNORECASE),
+    re.compile(r"<\|channel\|>thought\s*.*?<\|channel\|>", re.DOTALL | re.IGNORECASE),
+]
+LEADING_GEMMA4_THINK_TOKEN_RE = re.compile(r"^\s*<\|think\|>\s*", re.IGNORECASE)
 
 
 class SchemaValidationError(ValueError):
@@ -34,6 +41,20 @@ def parse_json_object(text: str) -> Dict[str, Any]:
     if not isinstance(parsed, dict):
         raise SchemaValidationError("Generated JSON must be an object.")
     return parsed
+
+
+def strip_visible_reasoning(text: str) -> tuple[str, bool]:
+    """Remove visible thinking blocks while leaving the final JSON text intact."""
+
+    cleaned = text
+    removal_count = 0
+    for pattern in VISIBLE_REASONING_RES:
+        cleaned, removed = pattern.subn("", cleaned)
+        removal_count += removed
+
+    cleaned, removed_trigger = LEADING_GEMMA4_THINK_TOKEN_RE.subn("", cleaned)
+    removal_count += removed_trigger
+    return cleaned.strip(), removal_count > 0
 
 
 def validate_json(payload: Mapping[str, Any], schema: Mapping[str, Any]) -> None:
@@ -91,4 +112,3 @@ def _matches_json_type(value: Any, expected_type: Any) -> bool:
     if expected_type == "null":
         return value is None
     return True
-

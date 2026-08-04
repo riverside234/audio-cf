@@ -14,6 +14,9 @@ Claim record:
 Previous validation feedback:
 {validation_feedback}
 
+Reasoning policy:
+{reasoning_instruction}
+
 Output schema:
 {qa_schema_json}
 
@@ -25,5 +28,7 @@ Rules:
 - required_evidence_sources must exactly match the claim evidence_sources.
 - Do not add acoustic details that are not stated in the captions or claim record.
 - Keep the answer short and suitable for later SFT.
-- Do not include long chain-of-thought reasoning.
+- Use the reasoning policy to check the claim evaluation before writing the final JSON.
+- If a thinking block is used, put only temporary reasoning inside it and put the final JSON after it.
+- Do not include long chain-of-thought reasoning in the answer field.
 - Return one JSON object only. Do not use markdown fences.
