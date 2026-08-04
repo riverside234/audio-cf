@@ -8,11 +8,11 @@ httpx>=0.27.0
 jsonschema>=4.21.0
 PyYAML>=6.0.1
 
-# Keep shared lab environments compatible with common analysis/UI packages
-# already installed there, such as scipy, streamlit, contourpy, and pywavelets.
-packaging>=23.2,<24
-protobuf>=4.25.0,<5
-rich>=13.7.0,<14
+# Keep shared dependency ranges broad enough for vLLM/flashinfer while avoiding
+# unbounded resolver drift. Older Streamlit environments may need a separate env.
+packaging>=24.2,<27
+protobuf>=4.25.0,<7
+rich>=13.7.0,<16
 
 # Optional graph wrapper used by synthetic.agents.graph.build_langgraph_app().
 # The default data_synthetic.py path can run without full LangChain.
