@@ -123,3 +123,20 @@ VERIFIER_OUTPUT_SCHEMA: Dict[str, Any] = {
 
 def schema_json(schema: Mapping[str, Any]) -> str:
     return json.dumps(dict(schema), ensure_ascii=False, indent=2, sort_keys=True)
+
+
+def response_format_json_schema(
+    name: str,
+    schema: Mapping[str, Any],
+    strict: bool = True,
+) -> Dict[str, Any]:
+    """Build an OpenAI/vLLM JSON-schema response_format for one agent call."""
+
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": name,
+            "strict": strict,
+            "schema": dict(schema),
+        },
+    }

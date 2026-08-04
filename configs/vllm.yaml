@@ -17,6 +17,7 @@ client:
   extra_body: {}
 
 generation:
+  # Fallback only. Each agent overrides this with its own JSON schema.
   response_format:
     type: "json_object"
   reasoning:
@@ -27,13 +28,10 @@ generation:
     strip_visible_reasoning: true
     reject_visible_reasoning: false
     instruction: >
-      Use Gemma 4 reasoning as configured by vLLM. The runtime may place
-      temporary reasoning in Gemma 4's thought channel, but the final message
-      content must be exactly one JSON object that matches the schema. Do not
-      put final JSON inside a reasoning/thought block. Do not output markdown
-      fences or extra explanation around the final JSON. The pipeline suppresses
-      or strips reasoning before parsing and never stores reasoning in the final
-      dataset.
+      Before returning the final JSON, check caption evidence, evidence-source
+      labels, target condition, counterfactual contradiction basis, and
+      forbidden inferences. Return only the final JSON object that matches the
+      schema.
   default:
     temperature: 0.2
     top_p: 0.95

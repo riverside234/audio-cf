@@ -33,5 +33,4 @@ Checks:
 - No private, demographic, medical, identity, emotional, exact-count, or location inference is allowed unless stated in captions.
 - Return PASS only if all checks pass.
 - Use the reasoning policy to audit the example carefully before writing the final JSON.
-- If a thinking block is used, put only temporary reasoning inside it and put the final JSON after it.
 - Return one JSON object only. Do not use markdown fences.
