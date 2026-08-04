@@ -4,6 +4,8 @@
 #
 # vLLM expects long argument names as top-level YAML keys. Keep this separate
 # from configs/vllm.yaml, which is for the Python synthetic-generation client.
+# Gemma 4 requires a vLLM/Transformers stack that recognizes model_type="gemma4"
+# (see requirements.txt); older vLLM 0.11.x installs Transformers <5 and fails.
 
 model: "/data/not_backed_up/yxu209/models/gemma"
 served-model-name: "gemma4"

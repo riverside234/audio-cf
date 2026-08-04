@@ -11,7 +11,7 @@ PyYAML>=6.0.1
 # Keep shared dependency ranges broad enough for vLLM/flashinfer while avoiding
 # unbounded resolver drift. Older Streamlit environments may need a separate env.
 packaging>=24.2,<27
-protobuf>=4.25.0,<7
+protobuf>=5.29.6,<7
 rich>=13.7.0,<16
 
 # Optional graph wrapper used by synthetic.agents.graph.build_langgraph_app().
@@ -20,5 +20,7 @@ langgraph>=0.2.0
 
 # Lab/GPU serving dependency for `vllm serve --config configs/vllm_server.yaml`.
 # vLLM is Linux/CUDA-oriented; this marker avoids installing it on native Windows.
-# Keep this recent for Gemma 4 reasoning parser + structured JSON outputs.
-vllm>=0.11.1,<0.12.0; platform_system == "Linux"
+# Gemma 4 needs Transformers 5 support for model_type="gemma4"; vLLM 0.11.x
+# still pins transformers<5 and will fail before the model starts loading.
+transformers>=5.5.3,<5.6.0; platform_system == "Linux"
+vllm>=0.19.1,<0.20.0; platform_system == "Linux"
