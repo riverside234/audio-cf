@@ -12,7 +12,12 @@ from synthetic.infrastructure.retry import RetryConfig
 from synthetic.infrastructure.schema_io import parse_json_object, validate_json
 
 from .reasoning import ReasoningPolicy, prepare_agent_response
-from .schemas import CLAIM_OUTPUT_SCHEMA, CLAIM_PROMPT_VERSION, schema_json
+from .schemas import (
+    CLAIM_OUTPUT_SCHEMA,
+    CLAIM_PROMPT_VERSION,
+    response_format_json_schema,
+    schema_json,
+)
 from .state import SyntheticGraphState, format_audio_context, validation_feedback
 
 
@@ -62,6 +67,10 @@ class ClaimAgent:
             temperature=self.temperature,
             top_p=self.top_p,
             max_tokens=self.max_tokens,
+            response_format=response_format_json_schema(
+                "claim_agent_output",
+                CLAIM_OUTPUT_SCHEMA,
+            ),
             retry_config=self.retry_config,
         )
         clean_text, stripped_reasoning = prepare_agent_response(

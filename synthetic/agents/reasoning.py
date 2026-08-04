@@ -12,13 +12,11 @@ DEFAULT_PRIVATE_REASONING_INSTRUCTION = """Use Gemma's reasoning ability before 
 Privately check: which captions explicitly support the claim, whether the target condition is satisfied, whether a counterfactual contradiction is based on explicit caption evidence, and whether any forbidden inference was introduced.
 Keep this reasoning private. Do not output chain-of-thought, analysis text, markdown, or <think> tags. Return only the final JSON object that matches the schema."""
 
-DEFAULT_VISIBLE_THINKING_INSTRUCTION = """Use Gemma's default thinking behavior if it is enabled by the served checkpoint or chat template.
-You may place temporary reasoning inside a <think>...</think> block. After the closing </think> tag, return exactly one final JSON object that matches the schema.
-Do not put the final JSON inside the thinking block. Do not output markdown fences or extra explanation outside the final JSON object. The pipeline will strip thinking blocks before parsing and will not store them in the final dataset."""
+DEFAULT_VISIBLE_THINKING_INSTRUCTION = """Before returning the final JSON, check caption evidence, evidence-source labels, target condition, counterfactual contradiction basis, and forbidden inferences.
+Return only the final JSON object that matches the schema."""
 
-DEFAULT_GEMMA4_VLLM_INSTRUCTION = """Use Gemma 4 reasoning as configured by vLLM.
-The runtime may place temporary reasoning in Gemma 4's thought channel and may suppress it from the API response. The final message content must be exactly one JSON object that matches the schema.
-Do not put final JSON inside a reasoning/thought block. Do not output markdown fences or extra explanation around the final JSON. The pipeline suppresses or strips reasoning before parsing and never stores reasoning in the final dataset."""
+DEFAULT_GEMMA4_VLLM_INSTRUCTION = """Before returning the final JSON, check caption evidence, evidence-source labels, target condition, counterfactual contradiction basis, and forbidden inferences.
+Return only the final JSON object that matches the schema."""
 
 
 @dataclass(frozen=True)

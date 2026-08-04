@@ -29,6 +29,5 @@ Rules:
 - Do not add acoustic details that are not stated in the captions or claim record.
 - Keep the answer short and suitable for later SFT.
 - Use the reasoning policy to check the claim evaluation before writing the final JSON.
-- If a thinking block is used, put only temporary reasoning inside it and put the final JSON after it.
 - Do not include long chain-of-thought reasoning in the answer field.
 - Return one JSON object only. Do not use markdown fences.
