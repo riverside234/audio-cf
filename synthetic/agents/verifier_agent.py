@@ -18,7 +18,7 @@ from .schemas import (
     response_format_json_schema,
     schema_json,
 )
-from .state import SyntheticGraphState, format_audio_context, validation_feedback
+from .state import SyntheticGenerationState, format_audio_context, validation_feedback
 
 
 class VerifierAgent:
@@ -44,7 +44,7 @@ class VerifierAgent:
         self.max_tokens = max_tokens
         self.reasoning_policy = reasoning_policy or ReasoningPolicy()
 
-    async def verify(self, state: SyntheticGraphState) -> Dict[str, Any]:
+    async def verify(self, state: SyntheticGenerationState) -> Dict[str, Any]:
         if state.target_condition is None:
             raise ValueError("state.target_condition must be set before VerifierAgent runs.")
         if state.claim_record is None:

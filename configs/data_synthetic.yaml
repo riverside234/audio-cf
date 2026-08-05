@@ -8,6 +8,8 @@ input:
 
 output:
   output_dir: "${cwd}/data/synthetic/clotho_audio_units_v0"
+  # Completed batches remain here if generation is interrupted.
+  batch_checkpoint_dir: "generation_batches"
   examples_parquet: "examples.parquet"
   examples_jsonl: "examples.jsonl"
   examples_audit_parquet: "examples_audit.parquet"

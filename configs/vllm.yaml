@@ -69,5 +69,5 @@ agents:
   prompt_version: "claim_agent_v0+qa_agent_v0+gemma4_medium_reasoning_v0"
 
 batching:
-  graph_max_concurrency: 8
+  runner_max_concurrency: 8
   unit_batch_size: 32

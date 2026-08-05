@@ -3,7 +3,7 @@
 
 This file is intentionally a thin CLI entrypoint:
 
-    audio_units.parquet/jsonl -> agents graph -> examples.parquet/jsonl
+    audio_units.parquet/jsonl -> deterministic agents -> examples.parquet/jsonl
 
 Agent behavior, schemas, prompt rendering, model calls, retry, and dataset IO live
 under synthetic/. This script only loads config, wires dependencies, and writes
@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,7 +27,7 @@ from synthetic.agents import (
     ReasoningPolicy,
     TargetConditionSampler,
     VerifierAgent,
-    build_graph,
+    build_runner,
 )
 from synthetic.infrastructure.dataset_io import (
     batched,
@@ -34,9 +35,9 @@ from synthetic.infrastructure.dataset_io import (
     validate_audio_unit_rows,
     write_json,
     write_jsonl,
-    write_parquet,
 )
 from synthetic.infrastructure.llm_client import LLMClientConfig, VLLMClient
+from synthetic.infrastructure.output_writer import IncrementalOutputWriter
 from synthetic.infrastructure.retry import RetryConfig
 from synthetic.infrastructure.run_logger import RunLogger, utc_now
 
@@ -48,6 +49,7 @@ DEFAULT_VLLM_CONFIG_PATH = Path("configs/vllm.yaml")
 @dataclass(frozen=True)
 class OutputPaths:
     output_dir: Path
+    checkpoint_dir: Path
     examples_parquet: Path
     examples_jsonl: Path
     examples_audit_parquet: Path
@@ -203,6 +205,8 @@ async def run_generation(
             dry_run=True,
             start_index=start_index,
             max_units=max_units,
+            status="dry_run",
+            completed_batches=0,
         )
         write_json(output_paths.stats, stats)
         write_jsonl(output_paths.errors_jsonl, [])
@@ -219,12 +223,13 @@ async def run_generation(
     if batch_size < 1:
         raise ValueError("batching.unit_batch_size must be >= 1.")
 
-    examples: List[Dict[str, Any]] = []
-    audit_rows: List[Dict[str, Any]] = []
-    error_rows: List[Dict[str, Any]] = []
+    output_writer = build_incremental_output_writer(output_paths, config)
+    examples_written = 0
+    errors_written = 0
+    completed_batches = 0
 
     async with VLLMClient(llm_client_config) as llm_client:
-        graph = build_configured_graph(
+        runner = build_configured_runner(
             llm_client=llm_client,
             retry_config=retry_config,
             vllm_config=vllm_config,
@@ -237,57 +242,81 @@ async def run_generation(
                 {"start_index": absolute_index, "batch_size": len(batch)},
             )
             states, batch_errors = await run_batch(
-                graph=graph,
+                runner=runner,
                 rows=batch,
                 start_index=absolute_index,
                 fail_fast=fail_fast,
                 continue_on_error=continue_on_error,
             )
+            batch_examples: List[Dict[str, Any]] = []
+            batch_audit_rows: List[Dict[str, Any]] = []
             for state in states:
                 if state.final_example is not None:
-                    examples.append(dict(state.final_example))
-                audit_rows.append(build_audit_row(state))
-            error_rows.extend(batch_errors)
+                    batch_examples.append(dict(state.final_example))
+                batch_audit_rows.append(build_audit_row(state))
+
+            output_writer.write_batch(
+                start_index=absolute_index,
+                input_count=len(batch),
+                examples=batch_examples,
+                audit_rows=batch_audit_rows,
+                error_rows=batch_errors,
+            )
+            examples_written += len(batch_examples)
+            errors_written += len(batch_errors)
+            completed_batches += 1
+            progress_stats = build_stats(
+                config=config,
+                vllm_config=vllm_config,
+                input_rows_loaded=len(rows),
+                selected_units=len(selected_rows),
+                examples_written=examples_written,
+                errors_written=errors_written,
+                dry_run=False,
+                start_index=start_index,
+                max_units=max_units,
+                status="in_progress",
+                completed_batches=completed_batches,
+            )
+            write_json(output_paths.stats, progress_stats)
+            logger.write_stats(progress_stats)
             logger.log_event(
                 "batch_completed",
                 {
                     "start_index": absolute_index,
                     "batch_size": len(batch),
-                    "examples_total": len(examples),
-                    "errors_total": len(error_rows),
+                    "examples_total": examples_written,
+                    "errors_total": errors_written,
+                    "checkpoint_dir": str(output_paths.checkpoint_dir),
                 },
             )
             absolute_index += len(batch)
 
-    write_outputs(
-        output_paths=output_paths,
-        config=config,
-        examples=examples,
-        audit_rows=audit_rows,
-        error_rows=error_rows,
-    )
+    output_writer.finalize()
     stats = build_stats(
         config=config,
         vllm_config=vllm_config,
         input_rows_loaded=len(rows),
         selected_units=len(selected_rows),
-        examples_written=len(examples),
-        errors_written=len(error_rows),
+        examples_written=examples_written,
+        errors_written=errors_written,
         dry_run=False,
         start_index=start_index,
         max_units=max_units,
+        status="completed",
+        completed_batches=completed_batches,
     )
     write_json(output_paths.stats, stats)
     logger.write_stats(stats)
     logger.log_event("generation_completed", stats)
 
-    print(f"Wrote {len(examples)} examples to {output_paths.examples_parquet}")
-    if error_rows:
-        print(f"Recorded {len(error_rows)} generation errors in {output_paths.errors_jsonl}")
-    return 0 if examples or not error_rows else 1
+    print(f"Wrote {examples_written} examples to {output_paths.examples_parquet}")
+    if errors_written:
+        print(f"Recorded {errors_written} generation errors in {output_paths.errors_jsonl}")
+    return 0 if examples_written or not errors_written else 1
 
 
-def build_configured_graph(
+def build_configured_runner(
     llm_client: VLLMClient,
     retry_config: RetryConfig,
     vllm_config: Mapping[str, Any],
@@ -341,7 +370,7 @@ def build_configured_graph(
             reasoning_policy=reasoning_policy,
         )
 
-    return build_graph(
+    return build_runner(
         claim_agent=claim_agent,
         qa_agent=qa_agent,
         verifier_agent=verifier_agent,
@@ -349,7 +378,7 @@ def build_configured_graph(
         run_verifier=run_verifier,
         max_validation_attempts=max_validation_attempts,
         max_concurrency=int(
-            get_nested(vllm_config, ["batching", "graph_max_concurrency"], 8) or 8
+            get_nested(vllm_config, ["batching", "runner_max_concurrency"], 8) or 8
         ),
         generation_model=generation_model,
         prompt_version=prompt_version,
@@ -357,17 +386,17 @@ def build_configured_graph(
 
 
 async def run_batch(
-    graph: Any,
+    runner: Any,
     rows: Sequence[Mapping[str, Any]],
     start_index: int,
     fail_fast: bool,
     continue_on_error: bool,
 ) -> Tuple[List[Any], List[Dict[str, Any]]]:
-    semaphore = asyncio.Semaphore(int(graph.max_concurrency))
+    semaphore = asyncio.Semaphore(int(runner.max_concurrency))
 
     async def run_one(offset: int, row: Mapping[str, Any]) -> Any:
         async with semaphore:
-            return await graph.run_unit(row, unit_index=start_index + offset)
+            return await runner.run_unit(row, unit_index=start_index + offset)
 
     tasks = [run_one(offset, row) for offset, row in enumerate(rows)]
     if fail_fast or not continue_on_error:
@@ -413,31 +442,30 @@ def build_audit_row(state: Any) -> Dict[str, Any]:
     }
 
 
-def write_outputs(
+def build_incremental_output_writer(
     output_paths: OutputPaths,
     config: Mapping[str, Any],
-    examples: Sequence[Dict[str, Any]],
-    audit_rows: Sequence[Dict[str, Any]],
-    error_rows: Sequence[Dict[str, Any]],
-) -> None:
-    write_parquet_enabled = bool(get_nested(config, ["output", "write_parquet"], True))
-    write_jsonl_enabled = bool(get_nested(config, ["output", "write_jsonl"], True))
-    write_audit_enabled = bool(get_nested(config, ["output", "write_audit"], True))
-    review_sample_size = int(
-        get_nested(config, ["output", "review_sample_size"], 100) or 100
+) -> IncrementalOutputWriter:
+    return IncrementalOutputWriter(
+        checkpoint_dir=output_paths.checkpoint_dir,
+        examples_parquet=output_paths.examples_parquet,
+        examples_jsonl=output_paths.examples_jsonl,
+        examples_audit_parquet=output_paths.examples_audit_parquet,
+        sample_for_human_review_jsonl=output_paths.sample_for_human_review_jsonl,
+        errors_jsonl=output_paths.errors_jsonl,
+        write_parquet_enabled=bool(
+            get_nested(config, ["output", "write_parquet"], True)
+        ),
+        write_jsonl_enabled=bool(
+            get_nested(config, ["output", "write_jsonl"], True)
+        ),
+        write_audit_enabled=bool(
+            get_nested(config, ["output", "write_audit"], True)
+        ),
+        review_sample_size=int(
+            get_nested(config, ["output", "review_sample_size"], 100)
+        ),
     )
-
-    if write_parquet_enabled and examples:
-        write_parquet(output_paths.examples_parquet, examples)
-    if write_jsonl_enabled:
-        write_jsonl(output_paths.examples_jsonl, examples)
-    if write_audit_enabled and audit_rows:
-        write_parquet(output_paths.examples_audit_parquet, audit_rows)
-        write_jsonl(
-            output_paths.sample_for_human_review_jsonl,
-            list(audit_rows)[:review_sample_size],
-        )
-    write_jsonl(output_paths.errors_jsonl, error_rows)
 
 
 def build_stats(
@@ -450,9 +478,12 @@ def build_stats(
     dry_run: bool,
     start_index: int,
     max_units: Optional[int],
+    status: str,
+    completed_batches: int,
 ) -> Dict[str, Any]:
     return {
         "timestamp": utc_now(),
+        "status": status,
         "dry_run": dry_run,
         "input_rows_loaded": input_rows_loaded,
         "selected_units": selected_units,
@@ -460,6 +491,8 @@ def build_stats(
         "max_units": max_units,
         "examples_written": examples_written,
         "errors_written": errors_written,
+        "completed_batches": completed_batches,
+        "checkpoint_dir": str(build_output_paths(config).checkpoint_dir),
         "generation_model": get_nested(vllm_config, ["client", "model"], ""),
         "run_verifier": bool(get_nested(vllm_config, ["agents", "run_verifier"], False)),
         "reasoning_enabled": bool(
@@ -501,9 +534,9 @@ def build_stats(
             ["agents", "prompt_version"],
             "claim_agent_v0+qa_agent_v0",
         ),
-        "graph_max_concurrency": get_nested(
+        "runner_max_concurrency": get_nested(
             vllm_config,
-            ["batching", "graph_max_concurrency"],
+            ["batching", "runner_max_concurrency"],
             8,
         ),
         "unit_batch_size": get_nested(vllm_config, ["batching", "unit_batch_size"], 32),
@@ -602,6 +635,14 @@ def build_output_paths(config: Mapping[str, Any]) -> OutputPaths:
     output_dir = resolve_path(get_nested(config, ["output", "output_dir"]), Path.cwd())
     return OutputPaths(
         output_dir=output_dir,
+        checkpoint_dir=output_dir
+        / str(
+            get_nested(
+                config,
+                ["output", "batch_checkpoint_dir"],
+                "generation_batches",
+            )
+        ),
         examples_parquet=output_dir
         / str(get_nested(config, ["output", "examples_parquet"], "examples.parquet")),
         examples_jsonl=output_dir
@@ -645,6 +686,7 @@ def expected_output_files(
         output_paths.stats,
         output_paths.errors_jsonl,
         output_paths.output_dir / "events.jsonl",
+        output_paths.checkpoint_dir,
     ]
     if bool(get_nested(config, ["output", "write_parquet"], True)):
         paths.append(output_paths.examples_parquet)
@@ -674,7 +716,9 @@ def clear_existing_outputs(paths: Sequence[Path], overwrite: bool) -> None:
     if not overwrite:
         return
     for path in paths:
-        if path.exists() and path.is_file():
+        if path.is_dir():
+            shutil.rmtree(path)
+        elif path.exists():
             path.unlink()
 
 

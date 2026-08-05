@@ -18,7 +18,7 @@ from .schemas import (
     response_format_json_schema,
     schema_json,
 )
-from .state import SyntheticGraphState, format_audio_context, validation_feedback
+from .state import SyntheticGenerationState, format_audio_context, validation_feedback
 
 
 class ClaimAgent:
@@ -44,7 +44,7 @@ class ClaimAgent:
         self.max_tokens = max_tokens
         self.reasoning_policy = reasoning_policy or ReasoningPolicy()
 
-    async def generate(self, state: SyntheticGraphState) -> Dict[str, Any]:
+    async def generate(self, state: SyntheticGenerationState) -> Dict[str, Any]:
         if state.target_condition is None:
             raise ValueError("state.target_condition must be set before ClaimAgent runs.")
 

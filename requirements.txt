@@ -18,10 +18,6 @@ packaging>=24.2,<27
 protobuf>=5.29.6,<7
 rich>=13.7.0,<16
 
-# Optional graph wrapper used by synthetic.agents.graph.build_langgraph_app().
-# The default data_synthetic.py path can run without full LangChain.
-langgraph>=0.2.0
-
 # Lab/GPU serving dependency for `vllm serve --config configs/vllm_server.yaml`.
 # vLLM is Linux/CUDA-oriented; this marker avoids installing it on native Windows.
 # Gemma 4 needs Transformers 5 support for model_type="gemma4"; vLLM 0.11.x

@@ -1,4 +1,4 @@
-"""Shared state and formatting helpers for the synthetic generation graph."""
+"""Shared state and formatting helpers for synthetic generation."""
 
 from __future__ import annotations
 
@@ -11,8 +11,8 @@ AudioUnitRecord = Dict[str, Any]
 
 
 @dataclass
-class SyntheticGraphState:
-    """Mutable state passed through the generation graph."""
+class SyntheticGenerationState:
+    """Mutable state passed through the generation sequence."""
 
     unit_record: AudioUnitRecord
     unit_index: int = 0
@@ -27,56 +27,6 @@ class SyntheticGraphState:
     visible_reasoning_stripped: List[str] = field(default_factory=list)
     validation_errors: List[str] = field(default_factory=list)
     retry_count: int = 0
-
-    def to_dict(self) -> JsonObject:
-        return {
-            "unit_record": self.unit_record,
-            "unit_index": self.unit_index,
-            "target_condition": self.target_condition,
-            "claim_record": self.claim_record,
-            "qa_record": self.qa_record,
-            "verifier_record": self.verifier_record,
-            "final_example": self.final_example,
-            "raw_claim_text": self.raw_claim_text,
-            "raw_qa_text": self.raw_qa_text,
-            "raw_verifier_text": self.raw_verifier_text,
-            "visible_reasoning_stripped": list(self.visible_reasoning_stripped),
-            "validation_errors": list(self.validation_errors),
-            "retry_count": self.retry_count,
-        }
-
-    @classmethod
-    def from_dict(cls, payload: Mapping[str, Any]) -> "SyntheticGraphState":
-        return cls(
-            unit_record=dict(payload["unit_record"]),
-            unit_index=int(payload.get("unit_index", 0)),
-            target_condition=_optional_dict(payload.get("target_condition")),
-            claim_record=_optional_dict(payload.get("claim_record")),
-            qa_record=_optional_dict(payload.get("qa_record")),
-            verifier_record=_optional_dict(payload.get("verifier_record")),
-            final_example=_optional_dict(payload.get("final_example")),
-            raw_claim_text=_optional_str(payload.get("raw_claim_text")),
-            raw_qa_text=_optional_str(payload.get("raw_qa_text")),
-            raw_verifier_text=_optional_str(payload.get("raw_verifier_text")),
-            visible_reasoning_stripped=[
-                str(item) for item in payload.get("visible_reasoning_stripped", [])
-            ],
-            validation_errors=[str(item) for item in payload.get("validation_errors", [])],
-            retry_count=int(payload.get("retry_count", 0)),
-        )
-
-
-def _optional_dict(value: Any) -> Optional[JsonObject]:
-    if value is None:
-        return None
-    return dict(value)
-
-
-def _optional_str(value: Any) -> Optional[str]:
-    if value is None:
-        return None
-    return str(value)
-
 
 def audio_source_labels(audio_count: int) -> List[str]:
     if audio_count < 1:

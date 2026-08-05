@@ -14,7 +14,7 @@ from .schemas import (
     QA_OUTPUT_SCHEMA,
     VERIFIER_OUTPUT_SCHEMA,
 )
-from .state import SyntheticGraphState, audio_source_labels
+from .state import SyntheticGenerationState, audio_source_labels
 
 
 class AgentValidationError(ValueError):
@@ -117,7 +117,7 @@ def validate_verifier_record(verifier_record: Mapping[str, Any], audio_count: in
 
 
 def build_final_example(
-    state: SyntheticGraphState,
+    state: SyntheticGenerationState,
     generation_model: str,
     prompt_version: str,
 ) -> Dict[str, Any]:
