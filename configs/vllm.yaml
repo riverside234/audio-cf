@@ -10,8 +10,9 @@ client:
   api_key: "EMPTY"
   model: "gemma4"
   timeout_s: 120
-  # Match runner concurrency and the server's max-num-seqs high-throughput cap.
-  client_max_inflight_requests: 64
+  # Conservative starting point for one H100 80GB hosting Gemma 4 31B BF16.
+  # Lower this and runner concurrency to 16 if vLLM reports preemption.
+  client_max_inflight_requests: 32
   verify_ssl: true
   # Optional model/vLLM-specific request fields. Generation reasoning settings
   # below are merged into this request body by data_synthetic.py.
@@ -24,9 +25,9 @@ generation:
   reasoning:
     enabled: true
     mode: "gemma4_vllm"
-    # Low retains thinking while reducing reasoning-token overhead for this
-    # tightly constrained task. Restore medium if the audit sample regresses.
-    effort: "low"
+    # Medium prioritizes generation quality. The larger response budget below
+    # leaves room for private reasoning plus the required structured JSON.
+    effort: "medium"
     include_reasoning: false
     strip_visible_reasoning: true
     reject_visible_reasoning: false
@@ -38,19 +39,19 @@ generation:
   default:
     temperature: 0.2
     top_p: 0.95
-    max_tokens: 512
+    max_tokens: 1024
   claim_agent:
     temperature: 0.2
     top_p: 0.95
-    max_tokens: 512
+    max_tokens: 1024
   qa_agent:
     temperature: 0.1
     top_p: 0.90
-    max_tokens: 512
+    max_tokens: 1024
   verifier_agent:
     temperature: 0.0
     top_p: 1.0
-    max_tokens: 512
+    max_tokens: 1024
 
 retry:
   max_attempts: 3
@@ -69,10 +70,10 @@ agents:
     claim_agent: "prompts/synthetic/claim_agent_v0.md"
     qa_agent: "prompts/synthetic/qa_agent_v0.md"
     verifier_agent: "prompts/synthetic/verifier_agent_v1.md"
-  prompt_version: "claim_agent_v0+qa_agent_v0+gemma4_low_reasoning_v0"
+  prompt_version: "claim_agent_v0+qa_agent_v0+gemma4_medium_reasoning_v0"
 
 batching:
-  # 64 jobs keep the server full; 256-unit checkpoints reduce disk/fsync
-  # overhead while limiting interruption loss to the active batch.
-  runner_max_concurrency: 64
+  # Start at 32 jobs on one H100 80GB. Reduce this and server max-num-seqs to
+  # 16 together if KV-cache preemption or OOM occurs.
+  runner_max_concurrency: 32
   unit_batch_size: 256

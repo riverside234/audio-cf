@@ -20,7 +20,9 @@ dtype: "bfloat16"
 # more KV-cache capacity for concurrent requests.
 max-model-len: 4096
 gpu-memory-utilization: 0.90
-max-num-seqs: 64
+# Gemma 4 31B BF16 occupies about 62.6GB before runtime/KV-cache overhead.
+# Start conservatively on one H100 80GB; reduce to 16 if preemption appears.
+max-num-seqs: 32
 max-num-batched-tokens: 16384
 
 enable-prefix-caching: true
@@ -30,7 +32,8 @@ enable-chunked-prefill: true
 # separately from final message content.
 reasoning-parser: "gemma4"
 
-# Single-GPU default. Increase only if you intentionally use tensor parallelism.
+# One full H100 80GB default. For two full H100s, expose both GPUs and set this
+# to 2. A half-H100/MIG slice does not have enough memory for this BF16 model.
 tensor-parallel-size: 1
 
 # If your vLLM build/model template does not auto-handle Gemma 4 thinking,
