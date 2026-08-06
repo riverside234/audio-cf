@@ -1,26 +1,17 @@
-# Python >= 3.10 recommended. Use Python 3.12 on the lab GPU machine if possible.
+# Python is installed separately; this project selects Python 3.12 in
+# `.python-version` for the stable vLLM/CUDA environment.
 
 # Core data processing and local IO.
-# The project does not import NumPy directly, but vLLM's OpenCV dependency now
-# requires NumPy 2.x on Python >= 3.9, while vLLM's Numba stack commonly caps
-# NumPy below 2.3. Keep this range vLLM-compatible for the lab GPU env.
-numpy>=2.0,<2.3
-
+numpy>=2.0,<2.5
 pyarrow>=15.0.0
 py7zr>=0.21.0
 httpx>=0.27.0
-jsonschema>=4.21.0
+jsonschema>=4.23.0
 PyYAML>=6.0.1
-
-# Keep shared dependency ranges broad enough for vLLM/flashinfer while avoiding
-# unbounded resolver drift. 
-packaging>=24.2,<27
-protobuf>=5.29.6,<7
-rich>=13.7.0,<16
 
 # Lab/GPU serving dependency for `vllm serve --config configs/vllm_server.yaml`.
 # vLLM is Linux/CUDA-oriented; this marker avoids installing it on native Windows.
-# Gemma 4 needs Transformers 5 support for model_type="gemma4"; vLLM 0.11.x
-# still pins transformers<5 and will fail before the model starts loading.
-transformers>=5.5.3,<5.6.0; platform_system == "Linux"
-vllm>=0.19.1,<0.20.0; platform_system == "Linux"
+# vLLM pins compatible PyTorch and CUDA runtime wheels transitively. Do not add
+# individual `nvidia-*` packages here or mix CUDA 12 and CUDA 13 wheel families.
+transformers>=5.5.3,<6.0.0; platform_system == "Linux"
+vllm>=0.25.1,<0.26.0; platform_system == "Linux"
