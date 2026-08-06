@@ -36,7 +36,11 @@ from synthetic.infrastructure.dataset_io import (
     write_json,
     write_jsonl,
 )
-from synthetic.infrastructure.llm_client import LLMClientConfig, VLLMClient
+from synthetic.infrastructure.llm_client import (
+    LLMClientConfig,
+    VLLMClient,
+    VLLMHTTPError,
+)
 from synthetic.infrastructure.output_writer import IncrementalOutputWriter
 from synthetic.infrastructure.retry import RetryConfig
 from synthetic.infrastructure.run_logger import RunLogger, utc_now
@@ -410,18 +414,41 @@ async def run_batch(
         unit = rows[offset]
         if isinstance(result, Exception):
             errors.append(
-                {
-                    "timestamp": utc_now(),
-                    "stage": "generation",
-                    "unit_index": start_index + offset,
-                    "unit_id": unit.get("unit_id", ""),
-                    "error_type": type(result).__name__,
-                    "message": str(result),
-                }
+                build_generation_error(
+                    result,
+                    unit_index=start_index + offset,
+                    unit_id=str(unit.get("unit_id", "")),
+                )
             )
         else:
             states.append(result)
     return states, errors
+
+
+def build_generation_error(
+    error: Exception,
+    *,
+    unit_index: int,
+    unit_id: str,
+) -> Dict[str, Any]:
+    row: Dict[str, Any] = {
+        "timestamp": utc_now(),
+        "stage": "generation",
+        "unit_index": unit_index,
+        "unit_id": unit_id,
+        "error_type": type(error).__name__,
+        "message": str(error),
+    }
+    if isinstance(error, VLLMHTTPError):
+        row.update(
+            {
+                "http_status": error.status_code,
+                "vllm_error": error.response_detail,
+                "retryable": error.retryable,
+                "request_summary": error.request_summary,
+            }
+        )
+    return row
 
 
 def build_audit_row(state: Any) -> Dict[str, Any]:

@@ -1,0 +1,144 @@
+from __future__ import annotations
+
+import json
+import unittest
+from typing import Any, Dict, List
+
+from data_synthetic import build_generation_error
+from synthetic.infrastructure.llm_client import (
+    LLMClientConfig,
+    VLLMClient,
+    VLLMHTTPError,
+)
+from synthetic.infrastructure.retry import RetryConfig
+
+
+class StubResponse:
+    def __init__(
+        self,
+        status_code: int,
+        payload: Any,
+        *,
+        reason_phrase: str = "",
+    ) -> None:
+        self.status_code = status_code
+        self._payload = payload
+        self.reason_phrase = reason_phrase or (
+            "Bad Request" if status_code == 400 else "Service Unavailable"
+        )
+        self.url = "http://localhost:8000/v1/chat/completions"
+        self.text = (
+            payload if isinstance(payload, str) else json.dumps(payload, sort_keys=True)
+        )
+
+    def json(self) -> Any:
+        if isinstance(self._payload, str):
+            raise ValueError("not JSON")
+        return self._payload
+
+
+class StubAsyncClient:
+    def __init__(self, responses: List[StubResponse]) -> None:
+        self.responses = list(responses)
+        self.calls: List[Dict[str, Any]] = []
+
+    async def post(self, path: str, **kwargs: Any) -> StubResponse:
+        self.calls.append({"path": path, **kwargs})
+        if not self.responses:
+            raise AssertionError("StubAsyncClient has no response left.")
+        return self.responses.pop(0)
+
+    async def aclose(self) -> None:
+        return None
+
+
+class VLLMClientTests(unittest.IsolatedAsyncioTestCase):
+    async def test_400_preserves_vllm_detail_and_does_not_retry(self) -> None:
+        transport = StubAsyncClient(
+            [
+                StubResponse(
+                    400,
+                    {
+                        "error": {
+                            "message": "The model `gemma4` does not exist.",
+                            "type": "NotFoundError",
+                            "param": "model",
+                            "code": 400,
+                        }
+                    },
+                )
+            ]
+        )
+        client = make_client(transport)
+
+        with self.assertRaises(VLLMHTTPError) as raised:
+            await client.chat_text(
+                messages=[{"role": "user", "content": "private prompt"}],
+                response_format={"type": "json_schema", "json_schema": {}},
+                retry_config=no_delay_retry(max_attempts=3),
+            )
+
+        error = raised.exception
+        self.assertEqual(len(transport.calls), 1)
+        self.assertEqual(error.status_code, 400)
+        self.assertFalse(error.retryable)
+        self.assertIn("The model `gemma4` does not exist.", str(error))
+        self.assertEqual(error.request_summary["model"], "gemma4")
+        self.assertEqual(error.request_summary["response_format"], "json_schema")
+        self.assertNotIn("private prompt", str(error))
+
+        error_row = build_generation_error(
+            error,
+            unit_index=7,
+            unit_id="unit-7",
+        )
+        self.assertEqual(error_row["http_status"], 400)
+        self.assertEqual(error_row["vllm_error"], error.response_detail)
+        self.assertFalse(error_row["retryable"])
+        self.assertEqual(error_row["request_summary"]["model"], "gemma4")
+
+    async def test_transient_503_retries_and_returns_success(self) -> None:
+        transport = StubAsyncClient(
+            [
+                StubResponse(503, "temporarily unavailable"),
+                StubResponse(
+                    200,
+                    {"choices": [{"message": {"content": "ready"}}]},
+                    reason_phrase="OK",
+                ),
+            ]
+        )
+        client = make_client(transport)
+
+        text = await client.chat_text(
+            messages=[{"role": "user", "content": "hello"}],
+            retry_config=no_delay_retry(max_attempts=2),
+        )
+
+        self.assertEqual(text, "ready")
+        self.assertEqual(len(transport.calls), 2)
+
+
+def make_client(transport: StubAsyncClient) -> VLLMClient:
+    client = VLLMClient(
+        LLMClientConfig(
+            model="gemma4",
+            extra_body={"reasoning_effort": "medium", "include_reasoning": False},
+        )
+    )
+    client._async_client = transport
+    return client
+
+
+def no_delay_retry(max_attempts: int) -> RetryConfig:
+    return RetryConfig(
+        max_attempts=max_attempts,
+        initial_delay_s=0,
+        max_delay_s=0,
+        backoff_multiplier=1,
+        jitter_s=0,
+    )
+
+
+if __name__ == "__main__":
+    unittest.main()

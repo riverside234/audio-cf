@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
@@ -10,6 +11,34 @@ from .retry import RetryConfig, retry_async
 
 
 ChatMessage = Dict[str, Any]
+MAX_ERROR_DETAIL_CHARS = 4000
+
+
+class VLLMHTTPError(RuntimeError):
+    """Actionable error returned by an OpenAI-compatible vLLM endpoint."""
+
+    def __init__(
+        self,
+        *,
+        status_code: int,
+        reason_phrase: str,
+        url: str,
+        response_detail: str,
+        request_summary: Mapping[str, Any],
+    ) -> None:
+        self.status_code = status_code
+        self.reason_phrase = reason_phrase
+        self.url = url
+        self.response_detail = response_detail
+        self.request_summary = dict(request_summary)
+        self.retryable = status_code in {408, 425, 429} or status_code >= 500
+        summary_text = ", ".join(
+            f"{key}={value!r}" for key, value in self.request_summary.items()
+        )
+        super().__init__(
+            f"vLLM request failed with HTTP {status_code} {reason_phrase} for "
+            f"{url}: {response_detail}. Request summary: {summary_text}"
+        )
 
 
 @dataclass
@@ -132,10 +161,22 @@ class VLLMClient:
                     json=payload,
                     headers=self._headers(),
                 )
-                response.raise_for_status()
+                if not 200 <= response.status_code < 300:
+                    raise VLLMHTTPError(
+                        status_code=response.status_code,
+                        reason_phrase=response.reason_phrase,
+                        url=str(response.url),
+                        response_detail=_response_error_detail(response),
+                        request_summary=_request_summary(payload),
+                    )
                 return response.json()
 
-        return await retry_async(operation, retry_config)
+        return await retry_async(
+            operation,
+            retry_config,
+            should_retry=lambda error: not isinstance(error, VLLMHTTPError)
+            or error.retryable,
+        )
 
     async def chat_text(
         self,
@@ -185,3 +226,61 @@ def extract_message_text(response: Mapping[str, Any]) -> str:
         raise ValueError("LLM response choice does not contain message.content.")
     return str(content)
 
+
+def _response_error_detail(response: Any) -> str:
+    try:
+        payload = response.json()
+    except (ValueError, TypeError):
+        payload = None
+
+    detail = ""
+    if isinstance(payload, Mapping):
+        error = payload.get("error")
+        if isinstance(error, Mapping):
+            parts = []
+            for key in ("message", "type", "param", "code"):
+                value = error.get(key)
+                if value is not None and value != "":
+                    parts.append(f"{key}={value!r}")
+            detail = ", ".join(parts)
+        payload_detail = payload.get("detail")
+        if not detail and payload_detail is not None and payload_detail != "":
+            detail = _json_text(payload_detail)
+        if not detail:
+            detail = _json_text(payload)
+    elif payload is not None:
+        detail = _json_text(payload)
+
+    if not detail:
+        detail = str(getattr(response, "text", "")).strip()
+    if not detail:
+        detail = "vLLM returned an empty error response"
+    if len(detail) > MAX_ERROR_DETAIL_CHARS:
+        return detail[:MAX_ERROR_DETAIL_CHARS] + "... [truncated]"
+    return detail
+
+
+def _request_summary(payload: Mapping[str, Any]) -> Dict[str, Any]:
+    standard_fields = {
+        "model",
+        "messages",
+        "temperature",
+        "top_p",
+        "max_tokens",
+        "response_format",
+    }
+    response_format = payload.get("response_format")
+    response_format_type = (
+        response_format.get("type") if isinstance(response_format, Mapping) else None
+    )
+    messages = payload.get("messages")
+    return {
+        "model": payload.get("model"),
+        "message_count": len(messages) if isinstance(messages, Sequence) else None,
+        "response_format": response_format_type,
+        "extra_fields": sorted(set(payload) - standard_fields),
+    }
+
+
+def _json_text(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)

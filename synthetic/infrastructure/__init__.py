@@ -9,7 +9,7 @@ from .dataset_io import (
     write_jsonl,
     write_parquet,
 )
-from .llm_client import LLMClientConfig, VLLMClient
+from .llm_client import LLMClientConfig, VLLMClient, VLLMHTTPError
 from .output_writer import IncrementalOutputWriter
 from .prompt_loader import PromptTemplate, load_prompt, render_prompt_file
 from .retry import RetryConfig, retry_async, retry_sync
@@ -31,6 +31,7 @@ __all__ = [
     "RunLogger",
     "SchemaValidationError",
     "VLLMClient",
+    "VLLMHTTPError",
     "batched",
     "load_json_schema",
     "load_prompt",

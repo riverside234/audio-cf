@@ -34,6 +34,7 @@ async def retry_async(
     operation: Callable[[], Awaitable[T]],
     config: Optional[RetryConfig] = None,
     retry_exceptions: Tuple[Type[BaseException], ...] = (Exception,),
+    should_retry: Optional[Callable[[BaseException], bool]] = None,
 ) -> T:
     """Run an async operation with retry/backoff."""
 
@@ -44,6 +45,8 @@ async def retry_async(
             return await operation()
         except retry_exceptions as exc:
             last_error = exc
+            if should_retry is not None and not should_retry(exc):
+                raise
             if attempt >= policy.max_attempts:
                 break
             await asyncio.sleep(policy.delay_for_attempt(attempt))
@@ -56,6 +59,7 @@ def retry_sync(
     operation: Callable[[], T],
     config: Optional[RetryConfig] = None,
     retry_exceptions: Tuple[Type[BaseException], ...] = (Exception,),
+    should_retry: Optional[Callable[[BaseException], bool]] = None,
 ) -> T:
     """Run a sync operation with retry/backoff."""
 
@@ -66,10 +70,11 @@ def retry_sync(
             return operation()
         except retry_exceptions as exc:
             last_error = exc
+            if should_retry is not None and not should_retry(exc):
+                raise
             if attempt >= policy.max_attempts:
                 break
             time.sleep(policy.delay_for_attempt(attempt))
 
     assert last_error is not None
     raise last_error
-
