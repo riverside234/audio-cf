@@ -327,7 +327,6 @@ def build_configured_runner(
     prompt_paths: Mapping[str, Path],
 ) -> Any:
     agents_config = dict(get_nested(vllm_config, ["agents"], {}) or {})
-    generation_model = str(get_nested(vllm_config, ["client", "model"], ""))
     run_verifier = bool(agents_config.get("run_verifier", False))
     max_validation_attempts = int(agents_config.get("max_validation_attempts", 2) or 2)
 
@@ -383,7 +382,6 @@ def build_configured_runner(
         max_concurrency=int(
             get_nested(vllm_config, ["batching", "runner_max_concurrency"], 8) or 8
         ),
-        generation_model=generation_model,
     )
 
 

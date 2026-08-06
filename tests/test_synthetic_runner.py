@@ -59,12 +59,13 @@ class SyntheticGenerationRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(state.final_example)
         assert state.final_example is not None
         self.assertEqual(state.final_example["claim_status"], "SUPPORTED")
-        self.assertEqual(state.final_example["generation_model"], "fake-model")
         provenance_fields = {
             "example_id",
             "unit_id",
             "prompt_version",
             "grounding_standard",
+            "audio_captions",
+            "generation_model",
         }
         self.assertTrue(provenance_fields.isdisjoint(state.final_example))
         self.assertTrue((state.example_id or "").startswith("synthetic_"))
@@ -112,7 +113,6 @@ class SyntheticGenerationRunnerTests(unittest.IsolatedAsyncioTestCase):
             claim_agent=claim_agent,
             qa_agent=qa_agent,
             max_validation_attempts=2,
-            generation_model="fake-model",
         )
 
 

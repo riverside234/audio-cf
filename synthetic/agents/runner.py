@@ -30,7 +30,6 @@ class SyntheticGenerationRunner:
     run_verifier: bool = False
     max_validation_attempts: int = 2
     max_concurrency: int = 8
-    generation_model: str = ""
 
     def __post_init__(self) -> None:
         if self.condition_sampler is None:
@@ -57,10 +56,7 @@ class SyntheticGenerationRunner:
         if self.run_verifier and self.verifier_agent is not None:
             await self._run_verifier(state)
 
-        state.final_example = build_final_example(
-            state=state,
-            generation_model=self.generation_model,
-        )
+        state.final_example = build_final_example(state=state)
         return state
 
     def _choose_condition(self, state: SyntheticGenerationState) -> TargetCondition:
@@ -112,7 +108,6 @@ def build_runner(
     run_verifier: bool = False,
     max_validation_attempts: int = 2,
     max_concurrency: int = 8,
-    generation_model: str = "",
 ) -> SyntheticGenerationRunner:
     return SyntheticGenerationRunner(
         claim_agent=claim_agent,
@@ -122,5 +117,4 @@ def build_runner(
         run_verifier=run_verifier,
         max_validation_attempts=max_validation_attempts,
         max_concurrency=max_concurrency,
-        generation_model=generation_model,
     )
