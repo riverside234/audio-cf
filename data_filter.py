@@ -26,39 +26,59 @@ import sys
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 
 GROUNDING_STANDARD = "caption_grounded"
 UNIT_SCHEMA_VERSION = "audio_unit_manifest_v1"
 FALLBACK_RELEASE_AUDIO_ROOT = "audio/clotho_v2_1"
 TOKEN_RE = re.compile(r"[a-z0-9]+")
+DEFAULT_CONFIG_PATH = Path("configs/data_filter.yaml")
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
+    bootstrap = argparse.ArgumentParser(add_help=False)
+    bootstrap.add_argument("--config", default=str(DEFAULT_CONFIG_PATH))
+    bootstrap_args, _ = bootstrap.parse_known_args(argv)
+    config_path = resolve_path(bootstrap_args.config, Path.cwd())
+    config = expand_placeholders(load_yaml(config_path), Path.cwd())
+
     parser = argparse.ArgumentParser(
         description="Sample a Clotho manifest and create unique audio units."
     )
     parser.add_argument(
+        "--config",
+        default=str(config_path),
+        help="Path to configs/data_filter.yaml.",
+    )
+    parser.add_argument(
         "--input-manifest-path",
-        default=os.path.join(os.getcwd(), "data", "log", "full_manifest.parquet"),
+        default=get_nested(
+            config,
+            ["input", "manifest_path"],
+            os.path.join(os.getcwd(), "data", "log", "full_manifest.parquet"),
+        ),
         help="Path to full_manifest.parquet or full_manifest.jsonl from data_process.py.",
     )
     parser.add_argument(
         "--output-dir",
-        default=os.path.join(os.getcwd(), "data", "final"),
+        default=get_nested(
+            config,
+            ["output", "output_dir"],
+            os.path.join(os.getcwd(), "data", "final"),
+        ),
         help="Directory where subset and audio-unit files are written.",
     )
     parser.add_argument(
         "--splits",
         nargs="+",
-        default=["development"],
+        default=list(get_nested(config, ["input", "splits"], ["development"])),
         help="Only records from these split names are eligible.",
     )
     parser.add_argument(
         "--subset-size",
         type=int,
-        default=40,
+        default=int(get_nested(config, ["sampling", "subset_size"], 40)),
         help="Number of audio records to sample. Use 0 to keep all eligible records.",
     )
     parser.add_argument(
@@ -66,7 +86,7 @@ def parse_args() -> argparse.Namespace:
         "--pair-count",
         dest="unit_count",
         type=int,
-        default=20,
+        default=int(get_nested(config, ["sampling", "unit_count"], 20)),
         help=(
             "Number of unique audio units to create. --pair-count is kept as a "
             "backwards-compatible alias."
@@ -75,13 +95,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--audio-count",
         type=int,
-        default=2,
+        default=int(get_nested(config, ["sampling", "audio_count"], 2)),
         help="Number of audio clips per unit. Use 2 for the original paired-audio setup.",
     )
     parser.add_argument(
         "--random-seed",
         type=int,
-        default=42,
+        default=int(get_nested(config, ["sampling", "random_seed"], 42)),
         help="Seed for reproducible subsetting and grouping.",
     )
     parser.add_argument(
@@ -89,7 +109,7 @@ def parse_args() -> argparse.Namespace:
         "--pairing-strategy",
         dest="grouping_strategy",
         choices=["random", "caption_similar", "caption_dissimilar"],
-        default="random",
+        default=str(get_nested(config, ["sampling", "grouping_strategy"], "random")),
         help=(
             "Audio-unit grouping strategy. Similar/dissimilar use simple lexical "
             "caption overlap. --pairing-strategy is a backwards-compatible alias."
@@ -98,7 +118,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-audio-reuse",
         type=int,
-        default=None,
+        default=optional_int(get_nested(config, ["sampling", "max_audio_reuse"], None)),
         help="Maximum times an audio_id may appear across units. Default is unlimited.",
     )
     parser.add_argument(
@@ -106,7 +126,9 @@ def parse_args() -> argparse.Namespace:
         "--max-enumerated-pairs",
         dest="max_enumerated_units",
         type=int,
-        default=2_000_000,
+        default=int(
+            get_nested(config, ["sampling", "max_enumerated_units"], 2_000_000)
+        ),
         help=(
             "Maximum candidate units to enumerate before falling back to random "
             "attempts. --max-enumerated-pairs is a backwards-compatible alias."
@@ -115,32 +137,96 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--similarity-min",
         type=float,
-        default=0.10,
+        default=float(get_nested(config, ["similarity", "similarity_min"], 0.10)),
         help="Minimum lexical similarity for caption_similar strategy.",
     )
     parser.add_argument(
         "--similarity-max",
         type=float,
-        default=1.00,
+        default=float(get_nested(config, ["similarity", "similarity_max"], 1.00)),
         help="Maximum lexical similarity for caption_similar strategy.",
     )
     parser.add_argument(
         "--dissimilarity-max",
         type=float,
-        default=0.05,
+        default=float(get_nested(config, ["similarity", "dissimilarity_max"], 0.05)),
         help="Maximum lexical similarity for caption_dissimilar strategy.",
     )
     parser.add_argument(
         "--overwrite",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=bool(get_nested(config, ["runtime", "overwrite"], False)),
         help="Allow overwriting existing output files.",
     )
     parser.add_argument(
         "--strict",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=bool(get_nested(config, ["runtime", "strict"], False)),
         help="Fail if requested unit_count cannot be satisfied.",
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--write-jsonl",
+        action=argparse.BooleanOptionalAction,
+        default=bool(get_nested(config, ["output", "write_jsonl"], True)),
+        help="Write duplicate JSONL copies of subset and audio-unit outputs.",
+    )
+    parser.add_argument(
+        "--write-parquet",
+        action=argparse.BooleanOptionalAction,
+        default=bool(get_nested(config, ["output", "write_parquet"], True)),
+        help="Write canonical Parquet subset and audio-unit outputs.",
+    )
+    args = parser.parse_args(argv)
+    args.config_data = config
+    args.config_path = str(config_path)
+    return args
+
+
+def load_yaml(path: Path) -> Dict[str, Any]:
+    try:
+        import yaml  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "PyYAML is required to load data_filter config files."
+        ) from exc
+
+    with path.open("r", encoding="utf-8") as handle:
+        payload = yaml.safe_load(handle) or {}
+    if not isinstance(payload, dict):
+        raise ValueError(f"{path} must contain a YAML mapping.")
+    return dict(payload)
+
+
+def expand_placeholders(value: Any, cwd: Path) -> Any:
+    if isinstance(value, str):
+        return value.replace("${cwd}", str(cwd))
+    if isinstance(value, list):
+        return [expand_placeholders(item, cwd) for item in value]
+    if isinstance(value, dict):
+        return {key: expand_placeholders(item, cwd) for key, item in value.items()}
+    return value
+
+
+def resolve_path(value: Any, base: Path) -> Path:
+    path = Path(str(value)).expanduser()
+    return path if path.is_absolute() else base / path
+
+
+def get_nested(
+    payload: Mapping[str, Any],
+    keys: Sequence[str],
+    default: Any = None,
+) -> Any:
+    current: Any = payload
+    for key in keys:
+        if not isinstance(current, Mapping) or key not in current:
+            return default
+        current = current[key]
+    return current
+
+
+def optional_int(value: Any) -> Optional[int]:
+    return None if value is None else int(value)
 
 
 def utc_now() -> str:
@@ -603,21 +689,39 @@ def check_duplicate_audio_ids(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, 
 
 def main() -> int:
     args = parse_args()
+    if not args.write_parquet and not args.write_jsonl:
+        raise ValueError("Enable at least one of --write-parquet or --write-jsonl.")
+
     input_manifest = Path(args.input_manifest_path)
     output_dir = Path(args.output_dir)
-    ensure_pyarrow_available()
+    if args.write_parquet or input_manifest.suffix.lower() == ".parquet":
+        ensure_pyarrow_available()
     ensure_output_dir(output_dir)
 
+    output_config = dict(get_nested(args.config_data, ["output"], {}) or {})
     outputs = {
-        "subset_jsonl": output_dir / "subset_manifest.jsonl",
-        "subset_parquet": output_dir / "subset_manifest.parquet",
-        "audio_units_jsonl": output_dir / "audio_units.jsonl",
-        "audio_units_parquet": output_dir / "audio_units.parquet",
-        "config": output_dir / "filter_config_used.yaml",
-        "stats": output_dir / "filter_stats.json",
-        "errors": output_dir / "filter_errors.jsonl",
+        "subset_jsonl": output_dir
+        / str(output_config.get("subset_jsonl", "subset_manifest.jsonl")),
+        "subset_parquet": output_dir
+        / str(output_config.get("subset_parquet", "subset_manifest.parquet")),
+        "audio_units_jsonl": output_dir
+        / str(output_config.get("audio_units_jsonl", "audio_units.jsonl")),
+        "audio_units_parquet": output_dir
+        / str(output_config.get("audio_units_parquet", "audio_units.parquet")),
+        "config": output_dir
+        / str(output_config.get("config_used", "filter_config_used.yaml")),
+        "stats": output_dir / str(output_config.get("stats", "filter_stats.json")),
+        "errors": output_dir
+        / str(output_config.get("errors", "filter_errors.jsonl")),
     }
-    for path in outputs.values():
+    enabled_outputs = [outputs["config"], outputs["stats"], outputs["errors"]]
+    if args.write_jsonl:
+        enabled_outputs.extend([outputs["subset_jsonl"], outputs["audio_units_jsonl"]])
+    if args.write_parquet:
+        enabled_outputs.extend(
+            [outputs["subset_parquet"], outputs["audio_units_parquet"]]
+        )
+    for path in enabled_outputs:
         assert_can_write(path, args.overwrite)
 
     if not input_manifest.exists():
@@ -682,6 +786,9 @@ def main() -> int:
         "similarity_min": args.similarity_min,
         "similarity_max": args.similarity_max,
         "dissimilarity_max": args.dissimilarity_max,
+        "write_jsonl": args.write_jsonl,
+        "write_parquet": args.write_parquet,
+        "source_config_path": args.config_path,
     }
     stats = {
         "filter_timestamp": utc_now(),
@@ -700,16 +807,26 @@ def main() -> int:
         **unit_stats,
     }
 
-    write_jsonl(outputs["subset_jsonl"], subset_rows)
-    write_parquet(outputs["subset_parquet"], subset_rows)
-    write_jsonl(outputs["audio_units_jsonl"], unit_rows)
-    write_parquet(outputs["audio_units_parquet"], unit_rows)
+    if args.write_jsonl:
+        write_jsonl(outputs["subset_jsonl"], subset_rows)
+        write_jsonl(outputs["audio_units_jsonl"], unit_rows)
+    if args.write_parquet:
+        write_parquet(outputs["subset_parquet"], subset_rows)
+        write_parquet(outputs["audio_units_parquet"], unit_rows)
     write_json(outputs["config"], config)
     write_json(outputs["stats"], stats)
     write_jsonl(outputs["errors"], errors)
 
-    print(f"Wrote {len(subset_rows)} subset records to {outputs['subset_parquet']}")
-    print(f"Wrote {len(unit_rows)} audio units to {outputs['audio_units_parquet']}")
+    subset_output = (
+        outputs["subset_parquet"] if args.write_parquet else outputs["subset_jsonl"]
+    )
+    units_output = (
+        outputs["audio_units_parquet"]
+        if args.write_parquet
+        else outputs["audio_units_jsonl"]
+    )
+    print(f"Wrote {len(subset_rows)} subset records to {subset_output}")
+    print(f"Wrote {len(unit_rows)} audio units to {units_output}")
     if errors:
         print(f"Recorded {len(errors)} filter warnings/errors in {outputs['errors']}")
     return 0

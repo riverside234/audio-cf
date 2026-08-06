@@ -8,6 +8,8 @@ input:
 
 output:
   output_dir: "${cwd}/data/synthetic/clotho_audio_units_v0"
+  # Large-run profile: keep canonical Parquet plus durable checkpoints, but
+  # skip duplicate final JSONL and audit/review artifacts.
   # Completed batches remain here if generation is interrupted.
   batch_checkpoint_dir: "generation_batches"
   examples_parquet: "examples.parquet"
@@ -18,12 +20,13 @@ output:
   stats: "stats.json"
   errors_jsonl: "errors.jsonl"
   write_parquet: true
-  write_jsonl: true
-  write_audit: true
-  review_sample_size: 100
+  write_jsonl: false
+  write_audit: false
+  review_sample_size: 0
   overwrite: false
 
 vllm:
+  # Client concurrency and durable batch size are in configs/vllm.yaml.
   config_path: "${cwd}/configs/vllm.yaml"
 
 run:

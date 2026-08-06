@@ -257,7 +257,8 @@ async def run_generation(
             for state in states:
                 if state.final_example is not None:
                     batch_examples.append(dict(state.final_example))
-                batch_audit_rows.append(build_audit_row(state))
+                if output_writer.write_audit_enabled:
+                    batch_audit_rows.append(build_audit_row(state))
 
             output_writer.write_batch(
                 start_index=absolute_index,

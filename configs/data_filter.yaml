@@ -1,6 +1,4 @@
-# Configuration template for data_filter.py.
-# The current script still reads CLI arguments; this file mirrors those defaults
-# and can become the source of truth when config loading is added later.
+# High-throughput configuration for data_filter.py.
 # "${cwd}" means the same current-working-directory behavior as os.getcwd().
 
 input:
@@ -17,15 +15,22 @@ output:
   config_used: "filter_config_used.yaml"
   stats: "filter_stats.json"
   errors: "filter_errors.jsonl"
+  # Parquet is the canonical handoff to data_synthetic.py. Skipping duplicate
+  # JSONL avoids substantial serialization and disk IO on large runs.
+  write_parquet: true
+  write_jsonl: false
 
 sampling:
-  subset_size: 40
-  unit_count: 20
+  # Use all eligible development records and prepare a large generation pool.
+  subset_size: 0
+  unit_count: 100000
   audio_count: 2
   random_seed: 42
   grouping_strategy: "random"
   max_audio_reuse: null
-  max_enumerated_units: 2000000
+  # Random grouping switches to direct sampling above this threshold instead
+  # of materializing a large combinations list.
+  max_enumerated_units: 100000
 
 similarity:
   similarity_min: 0.10

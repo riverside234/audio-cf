@@ -24,3 +24,20 @@ for current wheel, driver, and container options.
 ```bash
 python -m unittest discover -s tests -v
 ```
+
+## Large Generation Run
+
+The checked-in configs use a high-throughput profile: 100,000 random two-audio
+units, Parquet-only data outputs, no generation audit table, 64 concurrent agent
+jobs, and 256-unit durable checkpoints.
+
+```bash
+python data_filter.py --config configs/data_filter.yaml --overwrite
+CUDA_VISIBLE_DEVICES=0 vllm serve --config configs/vllm_server.yaml
+python data_synthetic.py --config configs/data_synthetic.yaml --overwrite
+```
+
+If the lab CUDA/CCCL mismatch triggers the FlashInfer sampler compile error,
+start vLLM with `VLLM_USE_FLASHINFER_SAMPLER=0`. Monitor vLLM for KV-cache
+preemption or OOM; reduce `runner_max_concurrency` and `max-num-seqs` together
+if either occurs.

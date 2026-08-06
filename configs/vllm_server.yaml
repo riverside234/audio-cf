@@ -16,7 +16,9 @@ port: 8000
 uvicorn-log-level: "info"
 
 dtype: "bfloat16"
-max-model-len: 8192
+# Agent prompts and bounded outputs fit within 4096; a smaller context leaves
+# more KV-cache capacity for concurrent requests.
+max-model-len: 4096
 gpu-memory-utilization: 0.90
 max-num-seqs: 64
 max-num-batched-tokens: 16384
