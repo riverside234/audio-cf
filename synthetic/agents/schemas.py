@@ -10,6 +10,7 @@ EXAMPLE_SCHEMA_VERSION = "synthetic_example_v0"
 CLAIM_PROMPT_VERSION = "claim_agent_v0"
 QA_PROMPT_VERSION = "qa_agent_v0"
 VERIFIER_PROMPT_VERSION = "verifier_agent_v1"
+VLLM_UNSUPPORTED_SCHEMA_KEYS = frozenset({"uniqueItems"})
 
 CLAIM_TYPES = ["faithful", "counterfactual"]
 CLAIM_STATUSES = ["SUPPORTED", "CONTRADICTED", "PARTIALLY_SUPPORTED"]
@@ -137,6 +138,20 @@ def response_format_json_schema(
         "json_schema": {
             "name": name,
             "strict": strict,
-            "schema": dict(schema),
+            "schema": vllm_compatible_schema(schema),
         },
     }
+
+
+def vllm_compatible_schema(value: Any) -> Any:
+    """Copy a JSON schema without keywords unsupported by vLLM grammars."""
+
+    if isinstance(value, Mapping):
+        return {
+            key: vllm_compatible_schema(item)
+            for key, item in value.items()
+            if key not in VLLM_UNSUPPORTED_SCHEMA_KEYS
+        }
+    if isinstance(value, list):
+        return [vllm_compatible_schema(item) for item in value]
+    return value

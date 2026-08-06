@@ -12,6 +12,8 @@ from synthetic.agents import (
     ReasoningPolicy,
     SyntheticGenerationRunner,
 )
+from synthetic.agents.schemas import CLAIM_OUTPUT_SCHEMA, response_format_json_schema
+from synthetic.infrastructure.schema_io import SchemaValidationError, validate_json
 
 
 class FakeLLMClient:
@@ -103,6 +105,25 @@ class SyntheticGenerationRunnerTests(unittest.IsolatedAsyncioTestCase):
         )
 
 
+class VLLMResponseSchemaTests(unittest.TestCase):
+    def test_vllm_schema_omits_unique_items_without_mutating_local_schema(self) -> None:
+        response_format = response_format_json_schema(
+            "claim_agent_output",
+            CLAIM_OUTPUT_SCHEMA,
+        )
+        wire_schema = response_format["json_schema"]["schema"]
+
+        self.assertFalse(contains_key(wire_schema, "uniqueItems"))
+        self.assertTrue(contains_key(CLAIM_OUTPUT_SCHEMA, "uniqueItems"))
+
+    def test_local_schema_still_rejects_duplicate_evidence_sources(self) -> None:
+        claim = valid_claim()
+        claim["evidence_sources"] = ["AUDIO_1", "AUDIO_1"]
+
+        with self.assertRaises(SchemaValidationError):
+            validate_json(claim, CLAIM_OUTPUT_SCHEMA)
+
+
 def audio_unit() -> Dict[str, Any]:
     return {
         "unit_id": "unit-1",
@@ -141,6 +162,16 @@ def valid_qa() -> Dict[str, Any]:
         "claim_evaluation_explanation": "AUDIO_1 explicitly describes steady rain.",
         "required_evidence_sources": ["AUDIO_1"],
     }
+
+
+def contains_key(value: Any, target: str) -> bool:
+    if isinstance(value, dict):
+        return target in value or any(
+            contains_key(item, target) for item in value.values()
+        )
+    if isinstance(value, list):
+        return any(contains_key(item, target) for item in value)
+    return False
 
 
 if __name__ == "__main__":
