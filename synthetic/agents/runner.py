@@ -31,7 +31,6 @@ class SyntheticGenerationRunner:
     max_validation_attempts: int = 2
     max_concurrency: int = 8
     generation_model: str = ""
-    prompt_version: str = "claim_agent_v0+qa_agent_v0"
 
     def __post_init__(self) -> None:
         if self.condition_sampler is None:
@@ -61,7 +60,6 @@ class SyntheticGenerationRunner:
         state.final_example = build_final_example(
             state=state,
             generation_model=self.generation_model,
-            prompt_version=self.prompt_version,
         )
         return state
 
@@ -115,7 +113,6 @@ def build_runner(
     max_validation_attempts: int = 2,
     max_concurrency: int = 8,
     generation_model: str = "",
-    prompt_version: str = "claim_agent_v0+qa_agent_v0",
 ) -> SyntheticGenerationRunner:
     return SyntheticGenerationRunner(
         claim_agent=claim_agent,
@@ -126,5 +123,4 @@ def build_runner(
         max_validation_attempts=max_validation_attempts,
         max_concurrency=max_concurrency,
         generation_model=generation_model,
-        prompt_version=prompt_version,
     )

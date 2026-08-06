@@ -21,6 +21,7 @@ class SyntheticGenerationState:
     qa_record: Optional[JsonObject] = None
     verifier_record: Optional[JsonObject] = None
     final_example: Optional[JsonObject] = None
+    example_id: Optional[str] = None
     raw_claim_text: Optional[str] = None
     raw_qa_text: Optional[str] = None
     raw_verifier_text: Optional[str] = None

@@ -119,7 +119,6 @@ def validate_verifier_record(verifier_record: Mapping[str, Any], audio_count: in
 def build_final_example(
     state: SyntheticGenerationState,
     generation_model: str,
-    prompt_version: str,
 ) -> Dict[str, Any]:
     if state.target_condition is None:
         raise AgentValidationError("target_condition is missing.")
@@ -132,12 +131,10 @@ def build_final_example(
     claim = state.claim_record
     qa = state.qa_record
     unit_id = str(unit.get("unit_id", ""))
+    state.example_id = _example_id(unit_id, claim["claim_text"], qa["question"])
 
     return {
-        "example_id": _example_id(unit_id, claim["claim_text"], qa["question"]),
         "schema_version": EXAMPLE_SCHEMA_VERSION,
-        "grounding_standard": unit.get("grounding_standard", "caption_grounded"),
-        "unit_id": unit_id,
         "audio_count": int(unit["audio_count"]),
         "audio_ids": list(unit.get("audio_ids", [])),
         "local_audio_paths": list(unit.get("local_audio_paths", [])),
@@ -151,7 +148,6 @@ def build_final_example(
         "question": qa["question"],
         "answer": qa["answer"],
         "generation_model": generation_model,
-        "prompt_version": prompt_version,
     }
 
 

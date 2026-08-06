@@ -328,7 +328,6 @@ def build_configured_runner(
 ) -> Any:
     agents_config = dict(get_nested(vllm_config, ["agents"], {}) or {})
     generation_model = str(get_nested(vllm_config, ["client", "model"], ""))
-    prompt_version = str(agents_config.get("prompt_version", "claim_agent_v0+qa_agent_v0"))
     run_verifier = bool(agents_config.get("run_verifier", False))
     max_validation_attempts = int(agents_config.get("max_validation_attempts", 2) or 2)
 
@@ -385,7 +384,6 @@ def build_configured_runner(
             get_nested(vllm_config, ["batching", "runner_max_concurrency"], 8) or 8
         ),
         generation_model=generation_model,
-        prompt_version=prompt_version,
     )
 
 
@@ -452,9 +450,8 @@ def build_generation_error(
 
 
 def build_audit_row(state: Any) -> Dict[str, Any]:
-    final_example = state.final_example or {}
     return {
-        "example_id": final_example.get("example_id", ""),
+        "example_id": state.example_id or "",
         "unit_id": state.unit_record.get("unit_id", ""),
         "audio_count": state.unit_record.get("audio_count", 0),
         "target_condition": state.target_condition,

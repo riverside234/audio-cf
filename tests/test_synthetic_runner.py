@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from typing import Any, Dict, List
 
+from data_synthetic import build_audit_row
 from synthetic.agents import (
     ClaimAgent,
     QAAgent,
@@ -59,6 +60,17 @@ class SyntheticGenerationRunnerTests(unittest.IsolatedAsyncioTestCase):
         assert state.final_example is not None
         self.assertEqual(state.final_example["claim_status"], "SUPPORTED")
         self.assertEqual(state.final_example["generation_model"], "fake-model")
+        provenance_fields = {
+            "example_id",
+            "unit_id",
+            "prompt_version",
+            "grounding_standard",
+        }
+        self.assertTrue(provenance_fields.isdisjoint(state.final_example))
+        self.assertTrue((state.example_id or "").startswith("synthetic_"))
+        audit_row = build_audit_row(state)
+        self.assertEqual(audit_row["example_id"], state.example_id)
+        self.assertEqual(audit_row["unit_id"], "unit-1")
         self.assertEqual(state.visible_reasoning_stripped, ["claim_agent"])
         self.assertNotIn("private check", state.raw_claim_text or "")
         self.assertEqual(len(fake_client.calls), 2)
@@ -101,7 +113,6 @@ class SyntheticGenerationRunnerTests(unittest.IsolatedAsyncioTestCase):
             qa_agent=qa_agent,
             max_validation_attempts=2,
             generation_model="fake-model",
-            prompt_version="test-v0",
         )
 
 
