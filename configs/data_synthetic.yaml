@@ -21,8 +21,8 @@ output:
   errors_jsonl: "errors.jsonl"
   write_parquet: true
   write_jsonl: false
-  write_audit: false
-  review_sample_size: 0
+  write_audit: true
+  review_sample_size: 3
   overwrite: false
 
 vllm:
