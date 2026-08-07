@@ -29,7 +29,8 @@ python -m unittest discover -s tests -v
 
 The checked-in configs use a high-throughput profile: 100,000 random two-audio
 units, Parquet-only data outputs, no generation audit table, and 256-unit durable
-checkpoints. Qwen3.6 is the active default generator in `data_synthetic.yaml`.
+checkpoints. Gemma is the checked-in default in `data_synthetic.yaml`; select
+Qwen3.6 with the explicit `--vllm-config` command below.
 
 ```bash
 python data_filter.py --config configs/data_filter.yaml --overwrite
@@ -43,8 +44,8 @@ mkdir -p "$VLLM_CACHE_ROOT"
 
 The Qwen profile uses the local `/data/not_backed_up/yxu209/models/qwen`
 checkpoint, the `qwen3` reasoning parser, text-only loading, and Qwen's MTP head.
-Its 1,024-token thinking budget leaves the remainder of each 2,048-token
-completion budget for the required final JSON.
+Its 1,024-token thinking budget leaves the remainder of each 4,096-token
+completion budget for the required final JSON; the server context is 8,192.
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 vllm serve --config configs/vllm_server_qwen36.yaml

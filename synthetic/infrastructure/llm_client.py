@@ -244,26 +244,28 @@ def extract_message_text(response: Mapping[str, Any]) -> str:
     first = choices[0]
     message = first.get("message") or {}
     content = message.get("content")
-    if content is None:
-        finish_reason = first.get("finish_reason")
-        usage = response.get("usage") or {}
-        completion_tokens = (
-            usage.get("completion_tokens") if isinstance(usage, Mapping) else None
+    finish_reason = first.get("finish_reason")
+    usage = response.get("usage") or {}
+    completion_tokens = (
+        usage.get("completion_tokens") if isinstance(usage, Mapping) else None
+    )
+    message_fields = sorted(str(field) for field in message.keys())
+    if finish_reason == "length":
+        content_state = "partial" if content not in (None, "") else "no"
+        raise LLMResponseError(
+            f"LLM exhausted the completion token limit with {content_state} final "
+            "message.content. Constrained decoding can return an incomplete JSON "
+            "prefix when generation reaches this limit; increase the completion/"
+            "context limits or reduce the thinking budget.",
+            finish_reason=finish_reason,
+            completion_tokens=completion_tokens,
+            message_fields=message_fields,
         )
-        message_fields = sorted(str(field) for field in message.keys())
+    if content is None:
         has_reasoning = any(
             message.get(field) not in (None, "")
             for field in ("reasoning", "reasoning_content")
         )
-        if finish_reason == "length":
-            raise LLMResponseError(
-                "LLM exhausted the completion token limit before producing final "
-                "message.content. For reasoning models, set thinking_token_budget "
-                "below max_tokens or increase the completion/context limits.",
-                finish_reason=finish_reason,
-                completion_tokens=completion_tokens,
-                message_fields=message_fields,
-            )
         if has_reasoning:
             raise LLMResponseError(
                 "LLM response contains reasoning but no final message.content. "

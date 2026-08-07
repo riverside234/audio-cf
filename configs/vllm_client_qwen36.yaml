@@ -27,7 +27,7 @@ generation:
     # Qwen3.6 uses a boolean thinking switch rather than reasoning_effort.
     effort: "medium"
     # Force Qwen to leave thinking mode early enough to emit the final JSON.
-    # This is part of the 2048-token completion budget below.
+    # This is part of the 4096-token completion budget below.
     thinking_token_budget: 1024
     include_reasoning: false
     preserve_thinking: false
@@ -41,19 +41,19 @@ generation:
   default:
     temperature: 0.6
     top_p: 0.95
-    max_tokens: 2048
+    max_tokens: 4096
   claim_agent:
     temperature: 0.6
     top_p: 0.95
-    max_tokens: 2048
+    max_tokens: 4096
   qa_agent:
     temperature: 0.6
     top_p: 0.95
-    max_tokens: 2048
+    max_tokens: 4096
   verifier_agent:
     temperature: 0.6
     top_p: 0.95
-    max_tokens: 2048
+    max_tokens: 4096
 
 retry:
   max_attempts: 3

@@ -15,18 +15,14 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ModelProfileTests(unittest.TestCase):
-    def test_qwen_is_the_active_default_profile(self) -> None:
+    def test_configured_and_fallback_profiles_exist(self) -> None:
         config = load_yaml(ROOT / "configs" / "data_synthetic.yaml")
+        configured_path = str(config["vllm"]["config_path"]).replace(
+            "${cwd}/", ""
+        )
 
-        self.assertEqual(
-            DEFAULT_VLLM_CONFIG_PATH,
-            Path("configs/vllm_client_qwen36.yaml"),
-        )
-        self.assertTrue(
-            config["vllm"]["config_path"].endswith(
-                "configs/vllm_client_qwen36.yaml"
-            )
-        )
+        self.assertTrue((ROOT / configured_path).is_file())
+        self.assertTrue((ROOT / DEFAULT_VLLM_CONFIG_PATH).is_file())
 
     def test_client_and_server_profiles_use_matching_names_and_parsers(self) -> None:
         cases = [
@@ -73,6 +69,9 @@ class ModelProfileTests(unittest.TestCase):
 
         server = load_yaml(ROOT / "configs" / "vllm_server_qwen36.yaml")
         self.assertTrue(server["language-model-only"])
+        self.assertEqual(server["max-model-len"], 8192)
+        for agent_name in ("default", "claim_agent", "qa_agent", "verifier_agent"):
+            self.assertEqual(config["generation"][agent_name]["max_tokens"], 4096)
         self.assertEqual(
             server["speculative-config"],
             {

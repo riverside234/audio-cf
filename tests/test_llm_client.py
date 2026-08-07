@@ -73,12 +73,34 @@ class VLLMClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(error.finish_reason, "length")
         self.assertEqual(error.completion_tokens, 2048)
         self.assertEqual(error.message_fields, ["content", "role"])
-        self.assertIn("thinking_token_budget", str(error))
+        self.assertIn("incomplete JSON prefix", str(error))
 
         error_row = build_generation_error(error, unit_index=2, unit_id="unit-2")
         self.assertEqual(error_row["finish_reason"], "length")
         self.assertEqual(error_row["completion_tokens"], 2048)
         self.assertEqual(error_row["message_fields"], ["content", "role"])
+
+    async def test_length_limited_partial_json_is_rejected_before_parsing(self) -> None:
+        response = {
+            "choices": [
+                {
+                    "finish_reason": "length",
+                    "message": {
+                        "content": '{"answer":"unterminated',
+                        "role": "assistant",
+                    },
+                }
+            ],
+            "usage": {"completion_tokens": 4096},
+        }
+
+        with self.assertRaises(LLMResponseError) as raised:
+            extract_message_text(response)
+
+        self.assertEqual(raised.exception.finish_reason, "length")
+        self.assertEqual(raised.exception.completion_tokens, 4096)
+        self.assertIn("incomplete JSON prefix", str(raised.exception))
+        self.assertNotIn("unterminated", str(raised.exception))
 
     async def test_reasoning_only_response_has_actionable_error(self) -> None:
         response = {

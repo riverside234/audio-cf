@@ -14,7 +14,8 @@ uvicorn-log-level: "info"
 
 # The checkpoint declares its FP8 format; auto lets vLLM read that metadata.
 dtype: "auto"
-max-model-len: 4096
+# Leave room for the schema-heavy prompt, bounded thinking, and complete JSON.
+max-model-len: 8192
 gpu-memory-utilization: 0.90
 max-num-seqs: 64
 max-num-batched-tokens: 16384
