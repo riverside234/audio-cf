@@ -76,8 +76,8 @@ class ModelProfileTests(unittest.TestCase):
         self.assertEqual(
             server["speculative-config"],
             {
-                "method": "qwen3_next_mtp",
-                "num_speculative_tokens": 2,
+                "method": "mtp",
+                "num_speculative_tokens": 1,
             },
         )
 

@@ -31,12 +31,11 @@ reasoning-parser: "qwen3"
 # more memory for KV cache and concurrent requests.
 language-model-only: true
 
-# The official checkpoint includes mtp.safetensors. Start with two speculative
-# tokens as recommended by the Qwen model card; remove this mapping if MTP
-# causes a version-specific startup issue.
+# The checkpoint includes one native MTP layer. Current vLLM uses the generic
+# mtp method; one speculative token avoids repeated forwards through that layer.
 speculative-config:
-  method: "qwen3_next_mtp"
-  num_speculative_tokens: 2
+  method: "mtp"
+  num_speculative_tokens: 1
 
 tensor-parallel-size: 1
 download-dir: "/data/not_backed_up/yxu209/huggingface/cache"
