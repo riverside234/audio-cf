@@ -13,7 +13,6 @@ uvicorn-log-level: "info"
 # Keep the base dtype automatic; FP8 weight/activation quantization is selected
 # through vLLM's quantization argument, not dtype (which does not accept fp8).
 dtype: "auto"
-quantization: "fp8"
 max-model-len: 4096
 gpu-memory-utilization: 0.90
 max-num-seqs: 32
