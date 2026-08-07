@@ -28,7 +28,8 @@ output:
 vllm:
   # Qwen is the active profile. Override with --vllm-config
   # configs/vllm_client_gemma4.yaml to switch back to Gemma.
-  config_path: "${cwd}/configs/vllm_client_qwen36.yaml"
+  # config_path: "${cwd}/configs/vllm_client_qwen36.yaml"
+  config_path: "${cwd}/configs/vllm_client_gemma4.yaml"
 
 run:
   dry_run: false
