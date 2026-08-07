@@ -159,7 +159,7 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
             ),
             qa_agent=QAAgent(
                 llm_client=fake_client,  # type: ignore[arg-type]
-                prompt_path=ROOT / "prompts" / "synthetic" / "qa_agent_v1.md",
+                prompt_path=ROOT / "prompts" / "synthetic" / "qa_agent_v2.md",
                 reasoning_policy=policy,
             ),
         )
@@ -178,7 +178,17 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("Relevant captions:", qa_prompt)
         self.assertNotIn("A dog barks near a gate.", qa_prompt)
         self.assertLess(len(claim_prompt), 2600)
-        self.assertLess(len(qa_prompt), 1800)
+        self.assertLess(len(qa_prompt), 2200)
+
+    def test_qa_prompt_requires_a_complete_standalone_question(self) -> None:
+        prompt = (
+            ROOT / "prompts" / "synthetic" / "qa_agent_v2.md"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("includes the complete claim", prompt)
+        self.assertIn("at least eight words", prompt)
+        self.assertIn("end with a question mark", prompt)
+        self.assertIn("Never truncate the claim", prompt)
 
     def test_source_references_and_feedback_are_bounded(self) -> None:
         labels = prompt_audio_source_labels(
