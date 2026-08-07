@@ -4,7 +4,7 @@
 client:
   base_url: "http://localhost:8000/v1"
   api_key: "EMPTY"
-  model: "qwen3.6-35b-a3b-fp8"
+  model: "qwen3_5_moe"
   timeout_s: 120
   # The FP8 MoE checkpoint leaves substantially more H100 memory for KV cache
   # than Gemma 4 31B BF16. Reduce to 32 if preemption appears.
