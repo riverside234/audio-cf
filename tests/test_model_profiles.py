@@ -45,6 +45,7 @@ class ModelProfileTests(unittest.TestCase):
                 )
                 self.assertEqual(server["reasoning-parser"], parser)
                 self.assertEqual(server["dtype"], "auto")
+                self.assertEqual(server["max-model-len"], 8192)
 
     def test_gemma_uses_reasoning_effort_request_fields(self) -> None:
         config = load_yaml(ROOT / "configs" / "vllm_client_gemma4.yaml")
@@ -69,7 +70,6 @@ class ModelProfileTests(unittest.TestCase):
 
         server = load_yaml(ROOT / "configs" / "vllm_server_qwen36.yaml")
         self.assertTrue(server["language-model-only"])
-        self.assertEqual(server["max-model-len"], 8192)
         for agent_name in ("default", "claim_agent", "qa_agent", "verifier_agent"):
             self.assertEqual(config["generation"][agent_name]["max_tokens"], 4096)
         self.assertEqual(

@@ -6,7 +6,7 @@ client:
   api_key: "EMPTY"
   model: "gemma4"
   timeout_s: 120
-  # Conservative starting point for one H100 80GB hosting Gemma 4 31B BF16.
+  # Conservative starting point for one H100 80GB hosting Gemma 4 31B.
   # Lower this and runner concurrency to 16 if vLLM reports preemption.
   client_max_inflight_requests: 32
   verify_ssl: true

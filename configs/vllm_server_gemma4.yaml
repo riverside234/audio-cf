@@ -12,7 +12,8 @@ uvicorn-log-level: "info"
 
 # Read dtype and any quantization metadata from the local checkpoint.
 dtype: "auto"
-max-model-len: 4096
+# Match the Qwen profile's room for schema-heavy prompts and complete JSON.
+max-model-len: 8192
 gpu-memory-utilization: 0.90
 max-num-seqs: 32
 max-num-batched-tokens: 16384
