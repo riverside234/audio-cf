@@ -49,10 +49,12 @@ mkdir -p "$VLLM_CACHE_ROOT"
 ### Qwen3.6 FP8
 
 The Qwen profile uses the local `/data/not_backed_up/yxu209/models/qwen`
-checkpoint, the `qwen3` reasoning parser, text-only loading, and Qwen's MTP head.
+checkpoint, the `qwen3` reasoning parser, and text-only loading.
 Its 1,024-token thinking budget leaves the remainder of each 4,096-token
 completion budget for the required final JSON; the server context is 8,192.
 vLLM 0.25.x requires the V1 model runner for thinking-budget enforcement.
+MTP is intentionally disabled because combining Qwen speculative decoding,
+reasoning parsing, and structured output can lose the `</think>` transition.
 
 ```bash
 VLLM_USE_V2_MODEL_RUNNER=0 CUDA_VISIBLE_DEVICES=0 \

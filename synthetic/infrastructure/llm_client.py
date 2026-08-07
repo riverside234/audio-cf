@@ -233,6 +233,9 @@ class VLLMClient:
             extra_body=extra_body,
             retry_config=retry_config,
         )
+        active_response_format = (
+            self.config.response_format if response_format is None else response_format
+        )
         return extract_message_text(
             response,
             requested_model=self.config.model,
@@ -240,6 +243,9 @@ class VLLMClient:
                 self.config.max_tokens if max_tokens is None else max_tokens
             ),
             prompt_chars=_message_content_chars(messages),
+            allow_reasoning_json_fallback=_is_json_response_format(
+                active_response_format
+            ),
         )
 
     async def batch_chat_text(
@@ -262,6 +268,7 @@ def extract_message_text(
     requested_model: Any = None,
     requested_max_tokens: Any = None,
     prompt_chars: Any = None,
+    allow_reasoning_json_fallback: bool = False,
 ) -> str:
     choices = response.get("choices")
     if not choices:
@@ -289,7 +296,11 @@ def extract_message_text(
             requested_max_tokens=requested_max_tokens,
             prompt_chars=prompt_chars,
         )
-    if content is None:
+    if content in (None, ""):
+        if allow_reasoning_json_fallback and finish_reason == "stop":
+            recovered = _complete_reasoning_json_object(message)
+            if recovered is not None:
+                return recovered
         has_reasoning = any(
             message.get(field) not in (None, "")
             for field in ("reasoning", "reasoning_content")
@@ -318,6 +329,29 @@ def extract_message_text(
             prompt_chars=prompt_chars,
         )
     return str(content)
+
+
+def _is_json_response_format(response_format: Any) -> bool:
+    if not isinstance(response_format, Mapping):
+        return False
+    return response_format.get("type") in {"json_object", "json_schema"}
+
+
+def _complete_reasoning_json_object(message: Mapping[str, Any]) -> Optional[str]:
+    """Recover JSON misplaced by a reasoning parser without accepting prose."""
+
+    for field in ("reasoning", "reasoning_content"):
+        value = message.get(field)
+        if not isinstance(value, str) or not value.strip():
+            continue
+        candidate = value.strip()
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            return candidate
+    return None
 
 
 def _response_error_detail(response: Any) -> str:

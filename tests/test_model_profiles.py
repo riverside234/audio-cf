@@ -92,13 +92,7 @@ class ModelProfileTests(unittest.TestCase):
 
         server = load_yaml(ROOT / "configs" / "vllm_server_qwen36.yaml")
         self.assertTrue(server["language-model-only"])
-        self.assertEqual(
-            server["speculative-config"],
-            {
-                "method": "mtp",
-                "num_speculative_tokens": 1,
-            },
-        )
+        self.assertNotIn("speculative-config", server)
 
     def test_qwen_prefilled_opening_think_token_is_sanitized(self) -> None:
         clean, removed = strip_visible_reasoning(

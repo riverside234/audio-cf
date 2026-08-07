@@ -123,6 +123,67 @@ class VLLMClientTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ValueError, "exhausted max_tokens"):
             extract_message_text(response)
 
+    async def test_complete_structured_json_in_reasoning_is_recovered(self) -> None:
+        response = {
+            "choices": [
+                {
+                    "finish_reason": "stop",
+                    "message": {
+                        "content": None,
+                        "reasoning": '{"claim_text":"A bell rings."}',
+                    },
+                }
+            ],
+            "usage": {"completion_tokens": 12},
+        }
+        transport = StubAsyncClient([StubResponse(200, response, reason_phrase="OK")])
+        client = make_client(transport)
+
+        text = await client.chat_text(
+            messages=[{"role": "user", "content": "return JSON"}],
+            response_format={"type": "json_schema", "json_schema": {}},
+        )
+
+        self.assertEqual(text, '{"claim_text":"A bell rings."}')
+
+    async def test_reasoning_prose_is_not_recovered_as_structured_output(self) -> None:
+        response = {
+            "choices": [
+                {
+                    "finish_reason": "stop",
+                    "message": {
+                        "content": None,
+                        "reasoning": "I should return a JSON object next.",
+                    },
+                }
+            ]
+        }
+
+        with self.assertRaisesRegex(LLMResponseError, "reasoning but no final"):
+            extract_message_text(
+                response,
+                allow_reasoning_json_fallback=True,
+            )
+
+    async def test_truncated_reasoning_json_is_not_recovered(self) -> None:
+        response = {
+            "choices": [
+                {
+                    "finish_reason": "length",
+                    "message": {
+                        "content": None,
+                        "reasoning": '{"claim_text":"unfinished',
+                    },
+                }
+            ]
+        }
+
+        with self.assertRaisesRegex(LLMResponseError, "completion token limit"):
+            extract_message_text(
+                response,
+                allow_reasoning_json_fallback=True,
+            )
+
     async def test_400_preserves_vllm_detail_and_does_not_retry(self) -> None:
         transport = StubAsyncClient(
             [
