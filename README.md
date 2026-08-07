@@ -59,8 +59,8 @@ python data_synthetic.py \
 ### Gemma 4
 
 Stop the Qwen server before switching because both profiles use port 8000. The
-Gemma server also uses an 8,192-token context; its agent completions remain
-bounded at 1,024 tokens.
+Gemma server also uses an 8,192-token context and 4,096-token agent completion
+budgets.
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 vllm serve --config configs/vllm_server_gemma4.yaml

@@ -67,18 +67,26 @@ class VLLMClientTests(unittest.IsolatedAsyncioTestCase):
         }
 
         with self.assertRaises(LLMResponseError) as raised:
-            extract_message_text(response)
+            extract_message_text(
+                response,
+                requested_model="gemma4",
+                requested_max_tokens=1024,
+            )
 
         error = raised.exception
         self.assertEqual(error.finish_reason, "length")
         self.assertEqual(error.completion_tokens, 2048)
         self.assertEqual(error.message_fields, ["content", "role"])
+        self.assertEqual(error.requested_model, "gemma4")
+        self.assertEqual(error.requested_max_tokens, 1024)
         self.assertIn("incomplete JSON prefix", str(error))
 
         error_row = build_generation_error(error, unit_index=2, unit_id="unit-2")
         self.assertEqual(error_row["finish_reason"], "length")
         self.assertEqual(error_row["completion_tokens"], 2048)
         self.assertEqual(error_row["message_fields"], ["content", "role"])
+        self.assertEqual(error_row["requested_model"], "gemma4")
+        self.assertEqual(error_row["requested_max_tokens"], 1024)
 
     async def test_length_limited_partial_json_is_rejected_before_parsing(self) -> None:
         response = {

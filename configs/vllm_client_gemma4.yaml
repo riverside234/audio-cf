@@ -31,19 +31,19 @@ generation:
   default:
     temperature: 0.2
     top_p: 0.95
-    max_tokens: 1024
+    max_tokens: 4096
   claim_agent:
     temperature: 0.2
     top_p: 0.95
-    max_tokens: 1024
+    max_tokens: 4096
   qa_agent:
     temperature: 0.1
     top_p: 0.90
-    max_tokens: 1024
+    max_tokens: 4096
   verifier_agent:
     temperature: 0.0
     top_p: 1.0
-    max_tokens: 1024
+    max_tokens: 4096
 
 retry:
   max_attempts: 3

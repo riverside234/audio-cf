@@ -452,6 +452,8 @@ def build_generation_error(
                 "finish_reason": error.finish_reason,
                 "completion_tokens": error.completion_tokens,
                 "message_fields": error.message_fields,
+                "requested_model": error.requested_model,
+                "requested_max_tokens": error.requested_max_tokens,
             }
         )
     return row

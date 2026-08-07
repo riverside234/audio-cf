@@ -51,16 +51,24 @@ class LLMResponseError(ValueError):
         finish_reason: Any,
         completion_tokens: Any,
         message_fields: Sequence[str],
+        requested_model: Any = None,
+        requested_max_tokens: Any = None,
     ) -> None:
         self.finish_reason = finish_reason
         self.completion_tokens = completion_tokens
         self.message_fields = list(message_fields)
-        details = (
-            f"finish_reason={finish_reason!r}, "
-            f"completion_tokens={completion_tokens!r}, "
-            f"message_fields={self.message_fields!r}"
-        )
-        super().__init__(f"{message} ({details})")
+        self.requested_model = requested_model
+        self.requested_max_tokens = requested_max_tokens
+        details = [
+            f"finish_reason={finish_reason!r}",
+            f"completion_tokens={completion_tokens!r}",
+            f"message_fields={self.message_fields!r}",
+        ]
+        if requested_model is not None:
+            details.append(f"requested_model={requested_model!r}")
+        if requested_max_tokens is not None:
+            details.append(f"requested_max_tokens={requested_max_tokens!r}")
+        super().__init__(f"{message} ({', '.join(details)})")
 
 
 @dataclass
@@ -221,7 +229,13 @@ class VLLMClient:
             extra_body=extra_body,
             retry_config=retry_config,
         )
-        return extract_message_text(response)
+        return extract_message_text(
+            response,
+            requested_model=self.config.model,
+            requested_max_tokens=(
+                self.config.max_tokens if max_tokens is None else max_tokens
+            ),
+        )
 
     async def batch_chat_text(
         self,
@@ -237,7 +251,12 @@ class VLLMClient:
         return list(await asyncio.gather(*tasks))
 
 
-def extract_message_text(response: Mapping[str, Any]) -> str:
+def extract_message_text(
+    response: Mapping[str, Any],
+    *,
+    requested_model: Any = None,
+    requested_max_tokens: Any = None,
+) -> str:
     choices = response.get("choices")
     if not choices:
         raise ValueError("LLM response does not contain choices.")
@@ -260,6 +279,8 @@ def extract_message_text(response: Mapping[str, Any]) -> str:
             finish_reason=finish_reason,
             completion_tokens=completion_tokens,
             message_fields=message_fields,
+            requested_model=requested_model,
+            requested_max_tokens=requested_max_tokens,
         )
     if content is None:
         has_reasoning = any(
@@ -275,6 +296,8 @@ def extract_message_text(response: Mapping[str, Any]) -> str:
                 finish_reason=finish_reason,
                 completion_tokens=completion_tokens,
                 message_fields=message_fields,
+                requested_model=requested_model,
+                requested_max_tokens=requested_max_tokens,
             )
         raise LLMResponseError(
             "LLM response choice does not contain message.content. Check the "
@@ -282,6 +305,8 @@ def extract_message_text(response: Mapping[str, Any]) -> str:
             finish_reason=finish_reason,
             completion_tokens=completion_tokens,
             message_fields=message_fields,
+            requested_model=requested_model,
+            requested_max_tokens=requested_max_tokens,
         )
     return str(content)
 
