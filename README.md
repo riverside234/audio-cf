@@ -33,6 +33,10 @@ checkpoints. Qwen3.6 is the active default generator in `data_synthetic.yaml`.
 
 ```bash
 python data_filter.py --config configs/data_filter.yaml --overwrite
+
+# Keep vLLM compile and runtime caches off the home filesystem.
+export VLLM_CACHE_ROOT="/data/scratch/yxu209/.cache/vllm"
+mkdir -p "$VLLM_CACHE_ROOT"
 ```
 
 ### Qwen3.6 FP8
@@ -64,4 +68,5 @@ python data_synthetic.py \
 
 The client `model` must equal the server `served-model-name`. Monitor vLLM for
 KV-cache preemption or OOM and lower the matching client, runner, and server
-concurrency values together if needed.
+concurrency values together if needed. Set `VLLM_CACHE_ROOT` in every shell or
+batch job that launches vLLM; its default is `~/.cache/vllm`.
