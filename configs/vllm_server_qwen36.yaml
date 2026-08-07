@@ -5,7 +5,7 @@
 # Qwen recommends vLLM >= 0.19.0; requirements.txt currently uses >= 0.25.1.
 
 model: "/data/not_backed_up/yxu209/models/qwen"
-served-model-name: "qwen3.6-35b-a3b-fp8"
+served-model-name: "qwen3_5_moe"
 generation-config: "vllm"
 
 host: "0.0.0.0"
