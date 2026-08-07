@@ -452,6 +452,7 @@ def build_generation_error(
                 "finish_reason": error.finish_reason,
                 "completion_tokens": error.completion_tokens,
                 "message_fields": error.message_fields,
+                "message_field_states": error.message_field_states,
                 "requested_model": error.requested_model,
                 "requested_max_tokens": error.requested_max_tokens,
                 "prompt_chars": error.prompt_chars,

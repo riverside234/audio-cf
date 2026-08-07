@@ -51,6 +51,7 @@ class LLMResponseError(ValueError):
         finish_reason: Any,
         completion_tokens: Any,
         message_fields: Sequence[str],
+        message_field_states: Optional[Mapping[str, str]] = None,
         requested_model: Any = None,
         requested_max_tokens: Any = None,
         prompt_chars: Any = None,
@@ -58,6 +59,7 @@ class LLMResponseError(ValueError):
         self.finish_reason = finish_reason
         self.completion_tokens = completion_tokens
         self.message_fields = list(message_fields)
+        self.message_field_states = dict(message_field_states or {})
         self.requested_model = requested_model
         self.requested_max_tokens = requested_max_tokens
         self.prompt_chars = prompt_chars
@@ -65,6 +67,7 @@ class LLMResponseError(ValueError):
             f"finish_reason={finish_reason!r}",
             f"completion_tokens={completion_tokens!r}",
             f"message_fields={self.message_fields!r}",
+            f"message_field_states={self.message_field_states!r}",
         ]
         if requested_model is not None:
             details.append(f"requested_model={requested_model!r}")
@@ -282,6 +285,7 @@ def extract_message_text(
         usage.get("completion_tokens") if isinstance(usage, Mapping) else None
     )
     message_fields = sorted(str(field) for field in message.keys())
+    message_field_states = _message_field_states(message)
     if finish_reason == "length":
         content_state = "partial" if content not in (None, "") else "no"
         raise LLMResponseError(
@@ -292,6 +296,7 @@ def extract_message_text(
             finish_reason=finish_reason,
             completion_tokens=completion_tokens,
             message_fields=message_fields,
+            message_field_states=message_field_states,
             requested_model=requested_model,
             requested_max_tokens=requested_max_tokens,
             prompt_chars=prompt_chars,
@@ -314,6 +319,7 @@ def extract_message_text(
                 finish_reason=finish_reason,
                 completion_tokens=completion_tokens,
                 message_fields=message_fields,
+                message_field_states=message_field_states,
                 requested_model=requested_model,
                 requested_max_tokens=requested_max_tokens,
                 prompt_chars=prompt_chars,
@@ -324,6 +330,7 @@ def extract_message_text(
             finish_reason=finish_reason,
             completion_tokens=completion_tokens,
             message_fields=message_fields,
+            message_field_states=message_field_states,
             requested_model=requested_model,
             requested_max_tokens=requested_max_tokens,
             prompt_chars=prompt_chars,
@@ -335,6 +342,20 @@ def _is_json_response_format(response_format: Any) -> bool:
     if not isinstance(response_format, Mapping):
         return False
     return response_format.get("type") in {"json_object", "json_schema"}
+
+
+def _message_field_states(message: Mapping[str, Any]) -> Dict[str, str]:
+    states: Dict[str, str] = {}
+    for field in ("content", "reasoning", "reasoning_content", "refusal"):
+        if field not in message:
+            states[field] = "missing"
+        elif message.get(field) is None:
+            states[field] = "null"
+        elif message.get(field) == "":
+            states[field] = "empty"
+        else:
+            states[field] = "nonempty"
+    return states
 
 
 def _complete_reasoning_json_object(message: Mapping[str, Any]) -> Optional[str]:

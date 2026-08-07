@@ -55,6 +55,8 @@ completion budget for the required final JSON; the server context is 8,192.
 vLLM 0.25.x requires the V1 model runner for thinking-budget enforcement.
 MTP is intentionally disabled because combining Qwen speculative decoding,
 reasoning parsing, and structured output can lose the `</think>` transition.
+The Qwen client requests the reasoning field solely to recover a complete JSON
+object misplaced there by this parser bug; reasoning prose is never accepted.
 
 ```bash
 VLLM_USE_V2_MODEL_RUNNER=0 CUDA_VISIBLE_DEVICES=0 \

@@ -78,6 +78,15 @@ class VLLMClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(error.finish_reason, "length")
         self.assertEqual(error.completion_tokens, 2048)
         self.assertEqual(error.message_fields, ["content", "role"])
+        self.assertEqual(
+            error.message_field_states,
+            {
+                "content": "null",
+                "reasoning": "missing",
+                "reasoning_content": "missing",
+                "refusal": "missing",
+            },
+        )
         self.assertEqual(error.requested_model, "gemma4")
         self.assertEqual(error.requested_max_tokens, 1024)
         self.assertEqual(error.prompt_chars, 5328)
@@ -87,6 +96,7 @@ class VLLMClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(error_row["finish_reason"], "length")
         self.assertEqual(error_row["completion_tokens"], 2048)
         self.assertEqual(error_row["message_fields"], ["content", "role"])
+        self.assertEqual(error_row["message_field_states"], error.message_field_states)
         self.assertEqual(error_row["requested_model"], "gemma4")
         self.assertEqual(error_row["requested_max_tokens"], 1024)
         self.assertEqual(error_row["prompt_chars"], 5328)
@@ -137,7 +147,7 @@ class VLLMClientTests(unittest.IsolatedAsyncioTestCase):
             "usage": {"completion_tokens": 12},
         }
         transport = StubAsyncClient([StubResponse(200, response, reason_phrase="OK")])
-        client = make_client(transport)
+        client = make_client(transport, include_reasoning=True)
 
         text = await client.chat_text(
             messages=[{"role": "user", "content": "return JSON"}],
@@ -145,6 +155,7 @@ class VLLMClientTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(text, '{"claim_text":"A bell rings."}')
+        self.assertTrue(transport.calls[0]["json"]["include_reasoning"])
 
     async def test_reasoning_prose_is_not_recovered_as_structured_output(self) -> None:
         response = {
@@ -251,11 +262,18 @@ class VLLMClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(transport.calls), 2)
 
 
-def make_client(transport: StubAsyncClient) -> VLLMClient:
+def make_client(
+    transport: StubAsyncClient,
+    *,
+    include_reasoning: bool = False,
+) -> VLLMClient:
     client = VLLMClient(
         LLMClientConfig(
             model="gemma4",
-            extra_body={"reasoning_effort": "medium", "include_reasoning": False},
+            extra_body={
+                "reasoning_effort": "medium",
+                "include_reasoning": include_reasoning,
+            },
         )
     )
     client._async_client = transport

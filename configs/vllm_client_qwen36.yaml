@@ -29,7 +29,10 @@ generation:
     # Force Qwen to leave thinking mode early enough to emit the final JSON.
     # This is part of the 4096-token completion budget below.
     thinking_token_budget: 1024
-    include_reasoning: false
+    # Required as a compatibility fallback: some vLLM Qwen parser paths place
+    # schema-constrained final JSON in message.reasoning with null content.
+    # The client accepts it only when it is one complete JSON object.
+    include_reasoning: true
     preserve_thinking: false
     strip_visible_reasoning: true
     reject_visible_reasoning: false
