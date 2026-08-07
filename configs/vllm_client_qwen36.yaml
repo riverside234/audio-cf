@@ -6,8 +6,8 @@ client:
   api_key: "EMPTY"
   model: "qwen3_5_moe"
   timeout_s: 120
-  # The FP8 MoE checkpoint leaves substantially more H100 memory for KV cache
-  # than Gemma 4 31B BF16. Reduce to 32 if preemption appears.
+  # The sparse FP8 MoE checkpoint leaves substantial H100 memory for KV cache.
+  # Reduce to 32 if preemption appears.
   client_max_inflight_requests: 64
   verify_ssl: true
   # Qwen's recommended precise-task thinking sampler. Thinking controls are

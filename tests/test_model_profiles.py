@@ -48,6 +48,8 @@ class ModelProfileTests(unittest.TestCase):
                     reasoning_mode,
                 )
                 self.assertEqual(server["reasoning-parser"], parser)
+                self.assertEqual(server["dtype"], "auto")
+                self.assertEqual(server["quantization"], "fp8")
 
     def test_gemma_uses_reasoning_effort_request_fields(self) -> None:
         config = load_yaml(ROOT / "configs" / "vllm_client_gemma4.yaml")
