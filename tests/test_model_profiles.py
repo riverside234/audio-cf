@@ -61,8 +61,9 @@ class ModelProfileTests(unittest.TestCase):
         config = load_yaml(ROOT / "configs" / "vllm_client_gemma4.yaml")
         extra_body = build_request_extra_body(config, config["client"])
 
-        self.assertEqual(extra_body["reasoning_effort"], "medium")
+        self.assertEqual(extra_body["reasoning_effort"], "low")
         self.assertFalse(extra_body["include_reasoning"])
+        self.assertNotIn("thinking_token_budget", extra_body)
         self.assertNotIn("chat_template_kwargs", extra_body)
 
     def test_qwen_uses_chat_template_thinking_fields(self) -> None:

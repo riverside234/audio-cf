@@ -19,7 +19,9 @@ generation:
   reasoning:
     enabled: true
     mode: "gemma4_vllm"
-    effort: "medium"
+    # Gemma uses reasoning_effort rather than Qwen's hard thinking-token cap.
+    # Low keeps reasoning enabled while leaving room for schema-constrained JSON.
+    effort: "low"
     include_reasoning: false
     strip_visible_reasoning: true
     reject_visible_reasoning: false

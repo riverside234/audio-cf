@@ -60,7 +60,9 @@ python data_synthetic.py \
 
 Stop the Qwen server before switching because both profiles use port 8000. The
 Gemma server also uses an 8,192-token context and 4,096-token agent completion
-budgets.
+budgets. Its client profile uses `reasoning_effort: low` so reasoning remains
+enabled without routinely consuming the entire completion. If Gemma still ends
+at `finish_reason: length`, set the effort to `none` for these short schema tasks.
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 vllm serve --config configs/vllm_server_gemma4.yaml
