@@ -15,7 +15,6 @@ uvicorn-log-level: "info"
 # The checkpoint already contains FP8 weights. Set the quantization backend
 # explicitly while leaving vLLM's base dtype automatic.
 dtype: "auto"
-quantization: "fp8"
 max-model-len: 4096
 gpu-memory-utilization: 0.90
 max-num-seqs: 64
