@@ -30,8 +30,7 @@ python -m unittest discover -s tests -v
 The checked-in configs use a high-throughput profile: 100,000 random two-audio
 units, Parquet-only data outputs, no generation audit table, 32 concurrent agent
 jobs, medium Gemma reasoning, and 256-unit durable checkpoints. This profile
-targets one full H100 80GB; a half-H100/MIG slice cannot hold the 62.6GB BF16
-Gemma 4 31B checkpoint plus runtime memory.
+targets one full H100 80GB.
 
 ```bash
 python data_filter.py --config configs/data_filter.yaml --overwrite
@@ -39,8 +38,6 @@ CUDA_VISIBLE_DEVICES=0 vllm serve --config configs/vllm_server.yaml
 python data_synthetic.py --config configs/data_synthetic.yaml --overwrite
 ```
 
-If the lab CUDA/CCCL mismatch triggers the FlashInfer sampler compile error,
-start vLLM with `VLLM_USE_FLASHINFER_SAMPLER=0`. Monitor vLLM for KV-cache
-preemption or OOM; reduce `runner_max_concurrency` and `max-num-seqs` together
-from `32` to `16` if either occurs. For two full H100s, expose both GPUs and
+Monitor vLLM for KV-cache preemption or OOM; reduce `runner_max_concurrency` and `max-num-seqs` together
+from `32` to `16` if either occurs. For example, for two H100s, expose both GPUs and
 change `tensor-parallel-size` to `2` before benchmarking.
