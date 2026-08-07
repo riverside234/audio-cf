@@ -670,18 +670,21 @@ def build_request_extra_body(
             bool(reasoning.get("preserve_thinking", False)),
         )
         extra_body["chat_template_kwargs"] = chat_template_kwargs
-        thinking_token_budget = reasoning.get("thinking_token_budget")
-        if enabled and thinking_token_budget is not None:
-            thinking_token_budget = int(thinking_token_budget)
-            if thinking_token_budget < 1:
-                raise ValueError(
-                    "generation.reasoning.thinking_token_budget must be positive."
-                )
-            extra_body.setdefault("thinking_token_budget", thinking_token_budget)
     else:
         # Gemma 4 and generic vLLM reasoning profiles use the OpenAI-compatible
         # effort field. Qwen uses chat-template kwargs instead.
         extra_body.setdefault("reasoning_effort", effort if enabled else "none")
+
+    # vLLM enforces this sampling budget from parser-derived reasoning
+    # boundaries. It is independent of how each model enables thinking.
+    thinking_token_budget = reasoning.get("thinking_token_budget")
+    if enabled and thinking_token_budget is not None:
+        thinking_token_budget = int(thinking_token_budget)
+        if thinking_token_budget < 1:
+            raise ValueError(
+                "generation.reasoning.thinking_token_budget must be positive."
+            )
+        extra_body.setdefault("thinking_token_budget", thinking_token_budget)
     extra_body.setdefault("include_reasoning", include_reasoning)
     return extra_body
 

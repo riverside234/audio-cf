@@ -1,6 +1,7 @@
 # Qwen3.6-35B-A3B-FP8 text-only server profile for:
 #
-#   vllm serve --config configs/vllm_server_qwen36.yaml
+#   VLLM_USE_V2_MODEL_RUNNER=0 vllm serve \
+#     --config configs/vllm_server_qwen36.yaml
 #
 # Qwen recommends vLLM >= 0.19.0; requirements.txt currently uses >= 0.25.1.
 

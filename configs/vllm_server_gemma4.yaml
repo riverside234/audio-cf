@@ -1,6 +1,7 @@
 # Gemma 4 server profile for:
 #
-#   vllm serve --config configs/vllm_server_gemma4.yaml
+#   VLLM_USE_V2_MODEL_RUNNER=0 vllm serve \
+#     --config configs/vllm_server_gemma4.yaml
 
 model: "/data/not_backed_up/yxu209/models/gemma"
 served-model-name: "gemma4"
@@ -22,6 +23,7 @@ enable-prefix-caching: true
 enable-chunked-prefill: true
 
 # Gemma 4 uses channel-based thinking tokens.
+# vLLM 0.25.x needs VLLM_USE_V2_MODEL_RUNNER=0 to enforce client budgets.
 reasoning-parser: "gemma4"
 
 # Gemma 4 can loop on grammar-permitted whitespace in constrained JSON.

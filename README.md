@@ -52,9 +52,11 @@ The Qwen profile uses the local `/data/not_backed_up/yxu209/models/qwen`
 checkpoint, the `qwen3` reasoning parser, text-only loading, and Qwen's MTP head.
 Its 1,024-token thinking budget leaves the remainder of each 4,096-token
 completion budget for the required final JSON; the server context is 8,192.
+vLLM 0.25.x requires the V1 model runner for thinking-budget enforcement.
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 vllm serve --config configs/vllm_server_qwen36.yaml
+VLLM_USE_V2_MODEL_RUNNER=0 CUDA_VISIBLE_DEVICES=0 \
+  vllm serve --config configs/vllm_server_qwen36.yaml
 python data_synthetic.py \
   --config configs/data_synthetic.yaml \
   --vllm-config configs/vllm_client_qwen36.yaml \
@@ -66,15 +68,17 @@ python data_synthetic.py \
 
 Stop the Qwen server before switching because both profiles use port 8000. The
 Gemma server also uses an 8,192-token context and 4,096-token agent completion
-budgets. Its client profile uses `reasoning_effort: low` so reasoning remains
-enabled without routinely consuming the entire completion. If Gemma still ends
-at `finish_reason: length`, set the effort to `none` for these short schema tasks.
+budgets. For Gemma, `reasoning_effort: low` enables thinking but does not lower
+its token use relative to `medium` or `high`; `thinking_token_budget: 1024` is
+the actual private-reasoning cap. Set the effort to `none` only to disable
+thinking entirely.
 The server pins xgrammar and disables arbitrary JSON whitespace to mitigate the
 Gemma 4 constrained-decoding loop reported in vLLM issue 40080. Restart the
 Gemma server after changing or pulling its server YAML.
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 vllm serve --config configs/vllm_server_gemma4.yaml
+VLLM_USE_V2_MODEL_RUNNER=0 CUDA_VISIBLE_DEVICES=0 \
+  vllm serve --config configs/vllm_server_gemma4.yaml
 python data_synthetic.py \
   --config configs/data_synthetic.yaml \
   --vllm-config configs/vllm_client_gemma4.yaml \

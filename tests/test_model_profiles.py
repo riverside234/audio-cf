@@ -65,7 +65,7 @@ class ModelProfileTests(unittest.TestCase):
 
         self.assertEqual(extra_body["reasoning_effort"], "low")
         self.assertFalse(extra_body["include_reasoning"])
-        self.assertNotIn("thinking_token_budget", extra_body)
+        self.assertEqual(extra_body["thinking_token_budget"], 1024)
         self.assertNotIn("chat_template_kwargs", extra_body)
 
         server = load_yaml(ROOT / "configs" / "vllm_server_gemma4.yaml")

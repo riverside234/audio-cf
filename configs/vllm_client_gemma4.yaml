@@ -19,9 +19,11 @@ generation:
   reasoning:
     enabled: true
     mode: "gemma4_vllm"
-    # Gemma uses reasoning_effort rather than Qwen's hard thinking-token cap.
-    # Low keeps reasoning enabled while leaving room for schema-constrained JSON.
+    # For Gemma 4, low/medium/high all enable thinking; they are not numeric caps.
     effort: "low"
+    # vLLM forces Gemma's thought channel to end at this sampling budget.
+    # This is part of the 4096-token completion budget below.
+    thinking_token_budget: 1024
     include_reasoning: false
     strip_visible_reasoning: true
     reject_visible_reasoning: false
@@ -64,7 +66,7 @@ agents:
     claim_agent: "prompts/synthetic/claim_agent_v1.md"
     qa_agent: "prompts/synthetic/qa_agent_v1.md"
     verifier_agent: "prompts/synthetic/verifier_agent_v2.md"
-  prompt_version: "claim_agent_v1+qa_agent_v1+gemma4_low_reasoning_v1"
+  prompt_version: "claim_agent_v1+qa_agent_v1+gemma4_thinking1024_v2"
 
 batching:
   runner_max_concurrency: 32
