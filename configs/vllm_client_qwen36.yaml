@@ -26,6 +26,9 @@ generation:
     mode: "qwen3_vllm"
     # Qwen3.6 uses a boolean thinking switch rather than reasoning_effort.
     effort: "medium"
+    # Force Qwen to leave thinking mode early enough to emit the final JSON.
+    # This is part of the 2048-token completion budget below.
+    thinking_token_budget: 1024
     include_reasoning: false
     preserve_thinking: false
     strip_visible_reasoning: true

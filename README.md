@@ -43,6 +43,8 @@ mkdir -p "$VLLM_CACHE_ROOT"
 
 The Qwen profile uses the local `/data/not_backed_up/yxu209/models/qwen`
 checkpoint, the `qwen3` reasoning parser, text-only loading, and Qwen's MTP head.
+Its 1,024-token thinking budget leaves the remainder of each 2,048-token
+completion budget for the required final JSON.
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 vllm serve --config configs/vllm_server_qwen36.yaml

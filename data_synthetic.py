@@ -38,6 +38,7 @@ from synthetic.infrastructure.dataset_io import (
 )
 from synthetic.infrastructure.llm_client import (
     LLMClientConfig,
+    LLMResponseError,
     VLLMClient,
     VLLMHTTPError,
 )
@@ -445,6 +446,14 @@ def build_generation_error(
                 "request_summary": error.request_summary,
             }
         )
+    elif isinstance(error, LLMResponseError):
+        row.update(
+            {
+                "finish_reason": error.finish_reason,
+                "completion_tokens": error.completion_tokens,
+                "message_fields": error.message_fields,
+            }
+        )
     return row
 
 
@@ -658,6 +667,14 @@ def build_request_extra_body(
             bool(reasoning.get("preserve_thinking", False)),
         )
         extra_body["chat_template_kwargs"] = chat_template_kwargs
+        thinking_token_budget = reasoning.get("thinking_token_budget")
+        if enabled and thinking_token_budget is not None:
+            thinking_token_budget = int(thinking_token_budget)
+            if thinking_token_budget < 1:
+                raise ValueError(
+                    "generation.reasoning.thinking_token_budget must be positive."
+                )
+            extra_body.setdefault("thinking_token_budget", thinking_token_budget)
     else:
         # Gemma 4 and generic vLLM reasoning profiles use the OpenAI-compatible
         # effort field. Qwen uses chat-template kwargs instead.

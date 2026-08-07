@@ -41,6 +41,28 @@ class VLLMHTTPError(RuntimeError):
         )
 
 
+class LLMResponseError(ValueError):
+    """A successful HTTP response that lacks usable assistant content."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        finish_reason: Any,
+        completion_tokens: Any,
+        message_fields: Sequence[str],
+    ) -> None:
+        self.finish_reason = finish_reason
+        self.completion_tokens = completion_tokens
+        self.message_fields = list(message_fields)
+        details = (
+            f"finish_reason={finish_reason!r}, "
+            f"completion_tokens={completion_tokens!r}, "
+            f"message_fields={self.message_fields!r}"
+        )
+        super().__init__(f"{message} ({details})")
+
+
 @dataclass
 class LLMClientConfig:
     """Runtime settings for an OpenAI-compatible vLLM endpoint."""
@@ -223,18 +245,42 @@ def extract_message_text(response: Mapping[str, Any]) -> str:
     message = first.get("message") or {}
     content = message.get("content")
     if content is None:
+        finish_reason = first.get("finish_reason")
+        usage = response.get("usage") or {}
+        completion_tokens = (
+            usage.get("completion_tokens") if isinstance(usage, Mapping) else None
+        )
+        message_fields = sorted(str(field) for field in message.keys())
         has_reasoning = any(
             message.get(field) not in (None, "")
             for field in ("reasoning", "reasoning_content")
         )
+        if finish_reason == "length":
+            raise LLMResponseError(
+                "LLM exhausted the completion token limit before producing final "
+                "message.content. For reasoning models, set thinking_token_budget "
+                "below max_tokens or increase the completion/context limits.",
+                finish_reason=finish_reason,
+                completion_tokens=completion_tokens,
+                message_fields=message_fields,
+            )
         if has_reasoning:
-            raise ValueError(
+            raise LLMResponseError(
                 "LLM response contains reasoning but no final message.content. "
                 "The model may have exhausted max_tokens before leaving its "
                 "thinking block, or the configured reasoning parser may not match "
-                "the served model."
+                "the served model.",
+                finish_reason=finish_reason,
+                completion_tokens=completion_tokens,
+                message_fields=message_fields,
             )
-        raise ValueError("LLM response choice does not contain message.content.")
+        raise LLMResponseError(
+            "LLM response choice does not contain message.content. Check the "
+            "served model's reasoning parser and completion token budget.",
+            finish_reason=finish_reason,
+            completion_tokens=completion_tokens,
+            message_fields=message_fields,
+        )
     return str(content)
 
 

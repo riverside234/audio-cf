@@ -12,8 +12,7 @@ host: "0.0.0.0"
 port: 8000
 uvicorn-log-level: "info"
 
-# The checkpoint already contains FP8 weights. Set the quantization backend
-# explicitly while leaving vLLM's base dtype automatic.
+# The checkpoint declares its FP8 format; auto lets vLLM read that metadata.
 dtype: "auto"
 max-model-len: 4096
 gpu-memory-utilization: 0.90

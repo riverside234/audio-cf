@@ -49,7 +49,6 @@ class ModelProfileTests(unittest.TestCase):
                 )
                 self.assertEqual(server["reasoning-parser"], parser)
                 self.assertEqual(server["dtype"], "auto")
-                self.assertEqual(server["quantization"], "fp8")
 
     def test_gemma_uses_reasoning_effort_request_fields(self) -> None:
         config = load_yaml(ROOT / "configs" / "vllm_client_gemma4.yaml")
@@ -65,6 +64,7 @@ class ModelProfileTests(unittest.TestCase):
 
         self.assertNotIn("reasoning_effort", extra_body)
         self.assertFalse(extra_body["include_reasoning"])
+        self.assertEqual(extra_body["thinking_token_budget"], 1024)
         self.assertEqual(
             extra_body["chat_template_kwargs"],
             {"enable_thinking": True, "preserve_thinking": False},

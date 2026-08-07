@@ -7,6 +7,7 @@ from typing import Any, Dict, List
 from data_synthetic import build_generation_error
 from synthetic.infrastructure.llm_client import (
     LLMClientConfig,
+    LLMResponseError,
     VLLMClient,
     VLLMHTTPError,
     extract_message_text,
@@ -54,6 +55,31 @@ class StubAsyncClient:
 
 
 class VLLMClientTests(unittest.IsolatedAsyncioTestCase):
+    async def test_length_limited_reasoning_response_has_safe_metadata(self) -> None:
+        response = {
+            "choices": [
+                {
+                    "finish_reason": "length",
+                    "message": {"content": None, "role": "assistant"},
+                }
+            ],
+            "usage": {"completion_tokens": 2048},
+        }
+
+        with self.assertRaises(LLMResponseError) as raised:
+            extract_message_text(response)
+
+        error = raised.exception
+        self.assertEqual(error.finish_reason, "length")
+        self.assertEqual(error.completion_tokens, 2048)
+        self.assertEqual(error.message_fields, ["content", "role"])
+        self.assertIn("thinking_token_budget", str(error))
+
+        error_row = build_generation_error(error, unit_index=2, unit_id="unit-2")
+        self.assertEqual(error_row["finish_reason"], "length")
+        self.assertEqual(error_row["completion_tokens"], 2048)
+        self.assertEqual(error_row["message_fields"], ["content", "role"])
+
     async def test_reasoning_only_response_has_actionable_error(self) -> None:
         response = {
             "choices": [
