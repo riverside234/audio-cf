@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -16,9 +15,8 @@ from .schemas import (
     QA_OUTPUT_SCHEMA,
     QA_PROMPT_VERSION,
     response_format_json_schema,
-    schema_json,
 )
-from .state import SyntheticGenerationState, format_audio_context, validation_feedback
+from .state import SyntheticGenerationState, compact_json, validation_feedback
 
 
 class QAAgent:
@@ -52,21 +50,11 @@ class QAAgent:
 
         prompt = self.prompt_template.render(
             {
-                "audio_context": format_audio_context(state.unit_record),
-                "target_condition_json": json.dumps(
-                    state.target_condition,
-                    ensure_ascii=False,
-                    indent=2,
-                    sort_keys=True,
+                "claim_record_json": compact_json(state.claim_record),
+                "validation_feedback": validation_feedback(
+                    state.validation_errors,
+                    "QAAgent",
                 ),
-                "claim_record_json": json.dumps(
-                    state.claim_record,
-                    ensure_ascii=False,
-                    indent=2,
-                    sort_keys=True,
-                ),
-                "qa_schema_json": schema_json(QA_OUTPUT_SCHEMA),
-                "validation_feedback": validation_feedback(state.validation_errors),
                 "reasoning_instruction": self.reasoning_policy.prompt_text(),
             }
         )

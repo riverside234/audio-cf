@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -16,9 +15,15 @@ from .schemas import (
     VERIFIER_OUTPUT_SCHEMA,
     VERIFIER_PROMPT_VERSION,
     response_format_json_schema,
-    schema_json,
 )
-from .state import SyntheticGenerationState, format_audio_context, validation_feedback
+from .state import (
+    SyntheticGenerationState,
+    compact_json,
+    format_audio_context,
+    prompt_audio_source_labels,
+    prompt_target_condition,
+    validation_feedback,
+)
 
 
 class VerifierAgent:
@@ -52,29 +57,26 @@ class VerifierAgent:
         if state.qa_record is None:
             raise ValueError("state.qa_record must be set before VerifierAgent runs.")
 
+        source_labels = prompt_audio_source_labels(
+            state.unit_record,
+            state.target_condition,
+        )
         prompt = self.prompt_template.render(
             {
-                "audio_context": format_audio_context(state.unit_record),
-                "target_condition_json": json.dumps(
-                    state.target_condition,
-                    ensure_ascii=False,
-                    indent=2,
-                    sort_keys=True,
+                "audio_context": format_audio_context(
+                    state.unit_record,
+                    source_labels=source_labels,
+                    caption_offset=state.unit_index,
                 ),
-                "claim_record_json": json.dumps(
-                    state.claim_record,
-                    ensure_ascii=False,
-                    indent=2,
-                    sort_keys=True,
+                "target_condition_json": compact_json(
+                    prompt_target_condition(state.target_condition)
                 ),
-                "qa_record_json": json.dumps(
-                    state.qa_record,
-                    ensure_ascii=False,
-                    indent=2,
-                    sort_keys=True,
+                "claim_record_json": compact_json(state.claim_record),
+                "qa_record_json": compact_json(state.qa_record),
+                "validation_feedback": validation_feedback(
+                    state.validation_errors,
+                    "VerifierAgent",
                 ),
-                "verifier_schema_json": schema_json(VERIFIER_OUTPUT_SCHEMA),
-                "validation_feedback": validation_feedback(state.validation_errors),
                 "reasoning_instruction": self.reasoning_policy.prompt_text(),
             }
         )

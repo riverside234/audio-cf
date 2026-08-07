@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -16,9 +15,15 @@ from .schemas import (
     CLAIM_OUTPUT_SCHEMA,
     CLAIM_PROMPT_VERSION,
     response_format_json_schema,
-    schema_json,
 )
-from .state import SyntheticGenerationState, format_audio_context, validation_feedback
+from .state import (
+    SyntheticGenerationState,
+    compact_json,
+    format_audio_context,
+    prompt_audio_source_labels,
+    prompt_target_condition,
+    validation_feedback,
+)
 
 
 class ClaimAgent:
@@ -48,17 +53,24 @@ class ClaimAgent:
         if state.target_condition is None:
             raise ValueError("state.target_condition must be set before ClaimAgent runs.")
 
+        source_labels = prompt_audio_source_labels(
+            state.unit_record,
+            state.target_condition,
+        )
         prompt = self.prompt_template.render(
             {
-                "audio_context": format_audio_context(state.unit_record),
-                "target_condition_json": json.dumps(
-                    state.target_condition,
-                    ensure_ascii=False,
-                    indent=2,
-                    sort_keys=True,
+                "audio_context": format_audio_context(
+                    state.unit_record,
+                    source_labels=source_labels,
+                    caption_offset=state.unit_index,
                 ),
-                "claim_schema_json": schema_json(CLAIM_OUTPUT_SCHEMA),
-                "validation_feedback": validation_feedback(state.validation_errors),
+                "target_condition_json": compact_json(
+                    prompt_target_condition(state.target_condition)
+                ),
+                "validation_feedback": validation_feedback(
+                    state.validation_errors,
+                    "ClaimAgent",
+                ),
                 "reasoning_instruction": self.reasoning_policy.prompt_text(),
             }
         )

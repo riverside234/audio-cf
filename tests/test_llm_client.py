@@ -71,6 +71,7 @@ class VLLMClientTests(unittest.IsolatedAsyncioTestCase):
                 response,
                 requested_model="gemma4",
                 requested_max_tokens=1024,
+                prompt_chars=5328,
             )
 
         error = raised.exception
@@ -79,6 +80,7 @@ class VLLMClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(error.message_fields, ["content", "role"])
         self.assertEqual(error.requested_model, "gemma4")
         self.assertEqual(error.requested_max_tokens, 1024)
+        self.assertEqual(error.prompt_chars, 5328)
         self.assertIn("incomplete JSON prefix", str(error))
 
         error_row = build_generation_error(error, unit_index=2, unit_id="unit-2")
@@ -87,6 +89,7 @@ class VLLMClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(error_row["message_fields"], ["content", "role"])
         self.assertEqual(error_row["requested_model"], "gemma4")
         self.assertEqual(error_row["requested_max_tokens"], 1024)
+        self.assertEqual(error_row["prompt_chars"], 5328)
 
     async def test_length_limited_partial_json_is_rejected_before_parsing(self) -> None:
         response = {
@@ -151,6 +154,7 @@ class VLLMClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(error.retryable)
         self.assertIn("The model `gemma4` does not exist.", str(error))
         self.assertEqual(error.request_summary["model"], "gemma4")
+        self.assertEqual(error.request_summary["prompt_chars"], 14)
         self.assertEqual(error.request_summary["response_format"], "json_schema")
         self.assertNotIn("private prompt", str(error))
 

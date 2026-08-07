@@ -32,6 +32,12 @@ units, Parquet-only data outputs, no generation audit table, and 256-unit durabl
 checkpoints. Gemma is the checked-in default in `data_synthetic.yaml`; select
 Qwen3.6 with the explicit `--vllm-config` command below.
 
+Agent prompts are stage-specific: ClaimAgent receives at most three rotating
+captions from target-relevant sources, QAAgent receives the validated claim
+instead of the raw captions, and VerifierAgent independently receives relevant
+captions when enabled. File names, IDs, full schemas, and unrelated retry errors
+are excluded from prompts.
+
 ```bash
 python data_filter.py --config configs/data_filter.yaml --overwrite
 
@@ -63,6 +69,9 @@ Gemma server also uses an 8,192-token context and 4,096-token agent completion
 budgets. Its client profile uses `reasoning_effort: low` so reasoning remains
 enabled without routinely consuming the entire completion. If Gemma still ends
 at `finish_reason: length`, set the effort to `none` for these short schema tasks.
+The server pins xgrammar and disables arbitrary JSON whitespace to mitigate the
+Gemma 4 constrained-decoding loop reported in vLLM issue 40080. Restart the
+Gemma server after changing or pulling its server YAML.
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 vllm serve --config configs/vllm_server_gemma4.yaml

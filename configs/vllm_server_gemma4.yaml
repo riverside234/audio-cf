@@ -24,6 +24,11 @@ enable-chunked-prefill: true
 # Gemma 4 uses channel-based thinking tokens.
 reasoning-parser: "gemma4"
 
+# Gemma 4 can loop on grammar-permitted whitespace in constrained JSON.
+structured-outputs-config:
+  backend: "xgrammar"
+  disable_any_whitespace: true
+
 # One full H100 80GB default. For two full H100s, expose both GPUs and set 2.
 tensor-parallel-size: 1
 

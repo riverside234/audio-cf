@@ -454,6 +454,7 @@ def build_generation_error(
                 "message_fields": error.message_fields,
                 "requested_model": error.requested_model,
                 "requested_max_tokens": error.requested_max_tokens,
+                "prompt_chars": error.prompt_chars,
             }
         )
     return row
@@ -566,7 +567,7 @@ def build_stats(
         "prompt_version": get_nested(
             vllm_config,
             ["agents", "prompt_version"],
-            "claim_agent_v0+qa_agent_v0",
+            "claim_agent_v1+qa_agent_v1",
         ),
         "runner_max_concurrency": get_nested(
             vllm_config,
@@ -780,15 +781,15 @@ def resolve_prompt_paths(vllm_config: Mapping[str, Any]) -> Dict[str, Path]:
     prompts = dict(get_nested(vllm_config, ["agents", "prompts"], {}) or {})
     return {
         "claim_agent": resolve_path(
-            prompts.get("claim_agent", "prompts/synthetic/claim_agent_v0.md"),
+            prompts.get("claim_agent", "prompts/synthetic/claim_agent_v1.md"),
             Path.cwd(),
         ),
         "qa_agent": resolve_path(
-            prompts.get("qa_agent", "prompts/synthetic/qa_agent_v0.md"),
+            prompts.get("qa_agent", "prompts/synthetic/qa_agent_v1.md"),
             Path.cwd(),
         ),
         "verifier_agent": resolve_path(
-            prompts.get("verifier_agent", "prompts/synthetic/verifier_agent_v1.md"),
+            prompts.get("verifier_agent", "prompts/synthetic/verifier_agent_v2.md"),
             Path.cwd(),
         ),
     }

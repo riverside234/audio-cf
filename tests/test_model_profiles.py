@@ -46,6 +46,8 @@ class ModelProfileTests(unittest.TestCase):
                 self.assertEqual(server["reasoning-parser"], parser)
                 self.assertEqual(server["dtype"], "auto")
                 self.assertEqual(server["max-model-len"], 8192)
+                for prompt_path in client["agents"]["prompts"].values():
+                    self.assertTrue((ROOT / prompt_path).is_file())
                 for agent_name in (
                     "default",
                     "claim_agent",
@@ -65,6 +67,15 @@ class ModelProfileTests(unittest.TestCase):
         self.assertFalse(extra_body["include_reasoning"])
         self.assertNotIn("thinking_token_budget", extra_body)
         self.assertNotIn("chat_template_kwargs", extra_body)
+
+        server = load_yaml(ROOT / "configs" / "vllm_server_gemma4.yaml")
+        self.assertEqual(
+            server["structured-outputs-config"],
+            {
+                "backend": "xgrammar",
+                "disable_any_whitespace": True,
+            },
+        )
 
     def test_qwen_uses_chat_template_thinking_fields(self) -> None:
         config = load_yaml(ROOT / "configs" / "vllm_client_qwen36.yaml")

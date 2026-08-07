@@ -53,12 +53,14 @@ class LLMResponseError(ValueError):
         message_fields: Sequence[str],
         requested_model: Any = None,
         requested_max_tokens: Any = None,
+        prompt_chars: Any = None,
     ) -> None:
         self.finish_reason = finish_reason
         self.completion_tokens = completion_tokens
         self.message_fields = list(message_fields)
         self.requested_model = requested_model
         self.requested_max_tokens = requested_max_tokens
+        self.prompt_chars = prompt_chars
         details = [
             f"finish_reason={finish_reason!r}",
             f"completion_tokens={completion_tokens!r}",
@@ -68,6 +70,8 @@ class LLMResponseError(ValueError):
             details.append(f"requested_model={requested_model!r}")
         if requested_max_tokens is not None:
             details.append(f"requested_max_tokens={requested_max_tokens!r}")
+        if prompt_chars is not None:
+            details.append(f"prompt_chars={prompt_chars!r}")
         super().__init__(f"{message} ({', '.join(details)})")
 
 
@@ -235,6 +239,7 @@ class VLLMClient:
             requested_max_tokens=(
                 self.config.max_tokens if max_tokens is None else max_tokens
             ),
+            prompt_chars=_message_content_chars(messages),
         )
 
     async def batch_chat_text(
@@ -256,6 +261,7 @@ def extract_message_text(
     *,
     requested_model: Any = None,
     requested_max_tokens: Any = None,
+    prompt_chars: Any = None,
 ) -> str:
     choices = response.get("choices")
     if not choices:
@@ -281,6 +287,7 @@ def extract_message_text(
             message_fields=message_fields,
             requested_model=requested_model,
             requested_max_tokens=requested_max_tokens,
+            prompt_chars=prompt_chars,
         )
     if content is None:
         has_reasoning = any(
@@ -298,6 +305,7 @@ def extract_message_text(
                 message_fields=message_fields,
                 requested_model=requested_model,
                 requested_max_tokens=requested_max_tokens,
+                prompt_chars=prompt_chars,
             )
         raise LLMResponseError(
             "LLM response choice does not contain message.content. Check the "
@@ -307,6 +315,7 @@ def extract_message_text(
             message_fields=message_fields,
             requested_model=requested_model,
             requested_max_tokens=requested_max_tokens,
+            prompt_chars=prompt_chars,
         )
     return str(content)
 
@@ -361,9 +370,26 @@ def _request_summary(payload: Mapping[str, Any]) -> Dict[str, Any]:
     return {
         "model": payload.get("model"),
         "message_count": len(messages) if isinstance(messages, Sequence) else None,
+        "prompt_chars": _message_content_chars(messages),
         "response_format": response_format_type,
         "extra_fields": sorted(set(payload) - standard_fields),
     }
+
+
+def _message_content_chars(messages: Any) -> Optional[int]:
+    if not isinstance(messages, Sequence) or isinstance(messages, (str, bytes)):
+        return None
+
+    total = 0
+    for message in messages:
+        if not isinstance(message, Mapping):
+            continue
+        content = message.get("content")
+        if isinstance(content, str):
+            total += len(content)
+        elif content is not None:
+            total += len(_json_text(content))
+    return total
 
 
 def _json_text(value: Any) -> str:

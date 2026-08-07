@@ -14,7 +14,15 @@ from synthetic.agents import (
     SyntheticGenerationRunner,
 )
 from synthetic.agents.schemas import CLAIM_OUTPUT_SCHEMA, response_format_json_schema
+from synthetic.agents.state import (
+    format_audio_context,
+    prompt_audio_source_labels,
+    validation_feedback,
+)
 from synthetic.infrastructure.schema_io import SchemaValidationError, validate_json
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class FakeLLMClient:
@@ -36,13 +44,12 @@ class SyntheticGenerationRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.claim_prompt = prompt_dir / "claim.md"
         self.qa_prompt = prompt_dir / "qa.md"
         self.claim_prompt.write_text(
-            "{audio_context}\n{target_condition_json}\n{claim_schema_json}\n"
+            "{audio_context}\n{target_condition_json}\n"
             "{validation_feedback}\n{reasoning_instruction}\n",
             encoding="utf-8",
         )
         self.qa_prompt.write_text(
-            "{audio_context}\n{target_condition_json}\n{claim_record_json}\n"
-            "{qa_schema_json}\n{validation_feedback}\n{reasoning_instruction}\n",
+            "{claim_record_json}\n{validation_feedback}\n{reasoning_instruction}\n",
             encoding="utf-8",
         )
 
@@ -96,6 +103,10 @@ class SyntheticGenerationRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(state.validation_errors), 1)
         self.assertIn("claim_status must be 'SUPPORTED'", state.validation_errors[0])
         self.assertIn("ClaimAgent attempt 1", fake_client.calls[1]["messages"][0]["content"])
+        self.assertNotIn(
+            "ClaimAgent attempt 1",
+            fake_client.calls[2]["messages"][0]["content"],
+        )
 
     def _runner(self, fake_client: FakeLLMClient) -> SyntheticGenerationRunner:
         policy = ReasoningPolicy(strip_visible_reasoning=True)
@@ -114,6 +125,90 @@ class SyntheticGenerationRunnerTests(unittest.IsolatedAsyncioTestCase):
             qa_agent=qa_agent,
             max_validation_attempts=2,
         )
+
+
+class PromptContextTests(unittest.IsolatedAsyncioTestCase):
+    async def test_production_prompts_use_only_stage_relevant_context(self) -> None:
+        unit = audio_unit()
+        unit["audio_file_names"] = ["private/one.wav", "private/two.wav"]
+        unit["audio_captions"] = [
+            [
+                "Steady rain falls outside.",
+                "Rain taps against a roof.",
+                "Water patters during a shower.",
+                "A long storm continues overnight.",
+                "Distant rainfall can be heard.",
+            ],
+            [
+                "A dog barks near a gate.",
+                "Several vehicles pass on a road.",
+                "A horn sounds in traffic.",
+                "Footsteps cross the pavement.",
+                "People talk beside the street.",
+            ],
+        ]
+        fake_client = FakeLLMClient(
+            [json.dumps(valid_claim()), json.dumps(valid_qa())]
+        )
+        policy = ReasoningPolicy(mode="gemma4_vllm", strip_visible_reasoning=True)
+        runner = SyntheticGenerationRunner(
+            claim_agent=ClaimAgent(
+                llm_client=fake_client,  # type: ignore[arg-type]
+                prompt_path=ROOT / "prompts" / "synthetic" / "claim_agent_v1.md",
+                reasoning_policy=policy,
+            ),
+            qa_agent=QAAgent(
+                llm_client=fake_client,  # type: ignore[arg-type]
+                prompt_path=ROOT / "prompts" / "synthetic" / "qa_agent_v1.md",
+                reasoning_policy=policy,
+            ),
+        )
+
+        await runner.run_unit(unit, unit_index=0)
+
+        claim_prompt = fake_client.calls[0]["messages"][0]["content"]
+        qa_prompt = fake_client.calls[1]["messages"][0]["content"]
+        self.assertIn("Steady rain falls outside.", claim_prompt)
+        self.assertIn("Water patters during a shower.", claim_prompt)
+        self.assertNotIn("A long storm continues overnight.", claim_prompt)
+        self.assertNotIn("A dog barks near a gate.", claim_prompt)
+        self.assertNotIn("private/one.wav", claim_prompt)
+        self.assertNotIn("additionalProperties", claim_prompt)
+        self.assertNotIn("condition_name", claim_prompt)
+        self.assertNotIn("Relevant captions:", qa_prompt)
+        self.assertNotIn("A dog barks near a gate.", qa_prompt)
+        self.assertLess(len(claim_prompt), 2600)
+        self.assertLess(len(qa_prompt), 1800)
+
+    def test_source_references_and_feedback_are_bounded(self) -> None:
+        labels = prompt_audio_source_labels(
+            audio_unit(),
+            {
+                "evidence_sources": ["AUDIO_1"],
+                "instruction": "Move one fact from AUDIO_1 to AUDIO_2.",
+            },
+        )
+        self.assertEqual(labels, ["AUDIO_1", "AUDIO_2"])
+
+        context = format_audio_context(
+            audio_unit(),
+            source_labels=["AUDIO_1"],
+        )
+        self.assertIn("AUDIO_1 captions:", context)
+        self.assertNotIn("audio-1", context)
+        self.assertNotIn("one.wav", context)
+        self.assertNotIn("AUDIO_2", context)
+
+        feedback = validation_feedback(
+            [
+                f"ClaimAgent attempt 1: {'x' * 1000}",
+                "QAAgent attempt 1: unrelated",
+            ],
+            "ClaimAgent",
+            max_chars_per_item=100,
+        )
+        self.assertNotIn("QAAgent", feedback)
+        self.assertLessEqual(len(feedback), 102)
 
 
 class VLLMResponseSchemaTests(unittest.TestCase):
