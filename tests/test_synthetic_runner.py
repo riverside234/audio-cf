@@ -154,7 +154,7 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
         runner = SyntheticGenerationRunner(
             claim_agent=ClaimAgent(
                 llm_client=fake_client,  # type: ignore[arg-type]
-                prompt_path=ROOT / "prompts" / "synthetic" / "claim_agent_v1.md",
+                prompt_path=ROOT / "prompts" / "synthetic" / "claim_agent_v2.md",
                 reasoning_policy=policy,
             ),
             qa_agent=QAAgent(
@@ -177,7 +177,7 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("condition_name", claim_prompt)
         self.assertNotIn("Relevant captions:", qa_prompt)
         self.assertNotIn("A dog barks near a gate.", qa_prompt)
-        self.assertLess(len(claim_prompt), 2600)
+        self.assertLess(len(claim_prompt), 3600)
         self.assertLess(len(qa_prompt), 2200)
 
     def test_qa_prompt_requires_a_complete_standalone_question(self) -> None:
@@ -189,6 +189,16 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("at least eight words", prompt)
         self.assertIn("end with a question mark", prompt)
         self.assertIn("Never truncate the claim", prompt)
+
+    def test_claim_prompt_requires_atomic_and_careful_source_grounding(self) -> None:
+        prompt = (
+            ROOT / "prompts" / "synthetic" / "claim_agent_v2.md"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("one atomic event or attribute", prompt)
+        self.assertIn('contradiction_basis exactly to "none"', prompt)
+        self.assertIn("do not claim this proves the sound is absent", prompt)
+        self.assertIn("change only the dimension requested", prompt)
 
     def test_source_references_and_feedback_are_bounded(self) -> None:
         labels = prompt_audio_source_labels(
