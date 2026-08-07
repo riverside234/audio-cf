@@ -1,9 +1,5 @@
-# Python client config for data_synthetic.py and synthetic/infrastructure/llm_client.py.
-#
-# This file tells the synthetic generation code how to connect to a running
-# OpenAI-compatible vLLM server. Use configs/vllm_server.yaml for:
-#
-#   vllm serve --config configs/vllm_server.yaml
+# Python client profile for a Gemma 4 server started with
+# configs/vllm_server_gemma4.yaml.
 
 client:
   base_url: "http://localhost:8000/v1"
@@ -14,8 +10,6 @@ client:
   # Lower this and runner concurrency to 16 if vLLM reports preemption.
   client_max_inflight_requests: 32
   verify_ssl: true
-  # Optional model/vLLM-specific request fields. Generation reasoning settings
-  # below are merged into this request body by data_synthetic.py.
   extra_body: {}
 
 generation:
@@ -25,8 +19,6 @@ generation:
   reasoning:
     enabled: true
     mode: "gemma4_vllm"
-    # Medium prioritizes generation quality. The larger response budget below
-    # leaves room for private reasoning plus the required structured JSON.
     effort: "medium"
     include_reasoning: false
     strip_visible_reasoning: true
@@ -73,7 +65,5 @@ agents:
   prompt_version: "claim_agent_v0+qa_agent_v0+gemma4_medium_reasoning_v0"
 
 batching:
-  # Start at 32 jobs on one H100 80GB. Reduce this and server max-num-seqs to
-  # 16 together if KV-cache preemption or OOM occurs.
   runner_max_concurrency: 32
   unit_batch_size: 256

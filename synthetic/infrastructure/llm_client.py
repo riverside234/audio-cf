@@ -223,6 +223,17 @@ def extract_message_text(response: Mapping[str, Any]) -> str:
     message = first.get("message") or {}
     content = message.get("content")
     if content is None:
+        has_reasoning = any(
+            message.get(field) not in (None, "")
+            for field in ("reasoning", "reasoning_content")
+        )
+        if has_reasoning:
+            raise ValueError(
+                "LLM response contains reasoning but no final message.content. "
+                "The model may have exhausted max_tokens before leaving its "
+                "thinking block, or the configured reasoning parser may not match "
+                "the served model."
+            )
         raise ValueError("LLM response choice does not contain message.content.")
     return str(content)
 

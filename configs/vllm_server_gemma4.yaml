@@ -1,0 +1,31 @@
+# Gemma 4 server profile for:
+#
+#   vllm serve --config configs/vllm_server_gemma4.yaml
+
+model: "/data/not_backed_up/yxu209/models/gemma"
+served-model-name: "gemma4"
+generation-config: "vllm"
+
+host: "0.0.0.0"
+port: 8000
+uvicorn-log-level: "info"
+
+dtype: "bfloat16"
+max-model-len: 4096
+gpu-memory-utilization: 0.90
+max-num-seqs: 32
+max-num-batched-tokens: 16384
+
+enable-prefix-caching: true
+enable-chunked-prefill: true
+
+# Gemma 4 uses channel-based thinking tokens.
+reasoning-parser: "gemma4"
+
+# One full H100 80GB default. For two full H100s, expose both GPUs and set 2.
+tensor-parallel-size: 1
+
+download-dir: "/data/not_backed_up/yxu209/huggingface/cache"
+
+# Some models require this, but leave it disabled unless the model card says so.
+# trust-remote-code: false

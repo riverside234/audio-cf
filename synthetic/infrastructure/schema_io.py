@@ -16,6 +16,11 @@ VISIBLE_REASONING_RES = [
     re.compile(r"<\|channel\|>thought\s*.*?<\|channel\|>", re.DOTALL | re.IGNORECASE),
 ]
 LEADING_GEMMA4_THINK_TOKEN_RE = re.compile(r"^\s*<\|think\|>\s*", re.IGNORECASE)
+LEADING_QWEN_REASONING_WITH_CLOSER_RE = re.compile(
+    r"^\s*(?:(?!<think(?:ing)?>).)*?</think(?:ing)?>\s*"
+    r"(?=(?:```(?:json)?\s*)?\{)",
+    re.DOTALL | re.IGNORECASE,
+)
 
 
 class SchemaValidationError(ValueError):
@@ -54,6 +59,12 @@ def strip_visible_reasoning(text: str) -> tuple[str, bool]:
 
     cleaned, removed_trigger = LEADING_GEMMA4_THINK_TOKEN_RE.subn("", cleaned)
     removal_count += removed_trigger
+    # Qwen's chat template may prefill the opening <think> token, leaving only
+    # the generated reasoning text and closing </think> in completion content.
+    cleaned, removed_qwen_prefix = LEADING_QWEN_REASONING_WITH_CLOSER_RE.subn(
+        "", cleaned
+    )
+    removal_count += removed_qwen_prefix
     return cleaned.strip(), removal_count > 0
 
 

@@ -26,8 +26,9 @@ output:
   overwrite: false
 
 vllm:
-  # Client concurrency and durable batch size are in configs/vllm.yaml.
-  config_path: "${cwd}/configs/vllm.yaml"
+  # Qwen is the active profile. Override with --vllm-config
+  # configs/vllm_client_gemma4.yaml to switch back to Gemma.
+  config_path: "${cwd}/configs/vllm_client_qwen36.yaml"
 
 run:
   dry_run: false

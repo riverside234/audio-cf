@@ -28,16 +28,40 @@ python -m unittest discover -s tests -v
 ## Large Generation Run
 
 The checked-in configs use a high-throughput profile: 100,000 random two-audio
-units, Parquet-only data outputs, no generation audit table, 32 concurrent agent
-jobs, medium Gemma reasoning, and 256-unit durable checkpoints. This profile
-targets one full H100 80GB.
+units, Parquet-only data outputs, no generation audit table, and 256-unit durable
+checkpoints. Qwen3.6 is the active default generator in `data_synthetic.yaml`.
 
 ```bash
 python data_filter.py --config configs/data_filter.yaml --overwrite
-CUDA_VISIBLE_DEVICES=0 vllm serve --config configs/vllm_server.yaml
-python data_synthetic.py --config configs/data_synthetic.yaml --overwrite
 ```
 
-Monitor vLLM for KV-cache preemption or OOM; reduce `runner_max_concurrency` and `max-num-seqs` together
-from `32` to `16` if either occurs. For example, for two H100s, expose both GPUs and
-change `tensor-parallel-size` to `2` before benchmarking.
+### Qwen3.6 FP8
+
+The Qwen profile uses the local `/data/not_backed_up/yxu209/models/qwen`
+checkpoint, the `qwen3` reasoning parser, text-only loading, and Qwen's MTP head.
+
+```bash
+CUDA_VISIBLE_DEVICES=0 vllm serve --config configs/vllm_server_qwen36.yaml
+python data_synthetic.py \
+  --config configs/data_synthetic.yaml \
+  --vllm-config configs/vllm_client_qwen36.yaml \
+  --output-dir data/synthetic/clotho_audio_units_qwen36_v0 \
+  --overwrite
+```
+
+### Gemma 4
+
+Stop the Qwen server before switching because both profiles use port 8000.
+
+```bash
+CUDA_VISIBLE_DEVICES=0 vllm serve --config configs/vllm_server_gemma4.yaml
+python data_synthetic.py \
+  --config configs/data_synthetic.yaml \
+  --vllm-config configs/vllm_client_gemma4.yaml \
+  --output-dir data/synthetic/clotho_audio_units_gemma4_v0 \
+  --overwrite
+```
+
+The client `model` must equal the server `served-model-name`. Monitor vLLM for
+KV-cache preemption or OOM and lower the matching client, runner, and server
+concurrency values together if needed.

@@ -8,7 +8,7 @@ from typing import Tuple
 from synthetic.infrastructure.schema_io import SchemaValidationError, strip_visible_reasoning
 
 
-DEFAULT_PRIVATE_REASONING_INSTRUCTION = """Use Gemma's reasoning ability before writing the JSON object.
+DEFAULT_PRIVATE_REASONING_INSTRUCTION = """Use the model's reasoning ability before writing the JSON object.
 Privately check: which captions explicitly support the claim, whether the target condition is satisfied, whether a counterfactual contradiction is based on explicit caption evidence, and whether any forbidden inference was introduced.
 Keep this reasoning private. Do not output chain-of-thought, analysis text, markdown, or <think> tags. Return only the final JSON object that matches the schema."""
 
@@ -17,6 +17,9 @@ Return only the final JSON object that matches the schema."""
 
 DEFAULT_GEMMA4_VLLM_INSTRUCTION = """Before returning the final JSON, check caption evidence, evidence-source labels, target condition, counterfactual contradiction basis, and forbidden inferences.
 Return only the final JSON object that matches the schema."""
+
+DEFAULT_QWEN3_VLLM_INSTRUCTION = """Use thinking mode to check caption evidence, evidence-source labels, target condition, counterfactual contradiction basis, and forbidden inferences.
+After thinking, return only the final JSON object that matches the schema."""
 
 
 @dataclass(frozen=True)
@@ -37,6 +40,8 @@ class ReasoningPolicy:
             return self.instruction.strip()
         if self.mode == "gemma4_vllm":
             return DEFAULT_GEMMA4_VLLM_INSTRUCTION
+        if self.mode == "qwen3_vllm":
+            return DEFAULT_QWEN3_VLLM_INSTRUCTION
         if self.mode == "visible_thinking_strip":
             return DEFAULT_VISIBLE_THINKING_INSTRUCTION
         return DEFAULT_PRIVATE_REASONING_INSTRUCTION

@@ -1,0 +1,76 @@
+# Python client profile for Qwen3.6-35B-A3B-FP8 served with
+# configs/vllm_server_qwen36.yaml.
+
+client:
+  base_url: "http://localhost:8000/v1"
+  api_key: "EMPTY"
+  model: "qwen3.6-35b-a3b-fp8"
+  timeout_s: 120
+  # The FP8 MoE checkpoint leaves substantially more H100 memory for KV cache
+  # than Gemma 4 31B BF16. Reduce to 32 if preemption appears.
+  client_max_inflight_requests: 64
+  verify_ssl: true
+  # Qwen's recommended precise-task thinking sampler. Thinking controls are
+  # added by data_synthetic.py from generation.reasoning below.
+  extra_body:
+    top_k: 20
+    min_p: 0.0
+    presence_penalty: 0.0
+    repetition_penalty: 1.0
+
+generation:
+  response_format:
+    type: "json_object"
+  reasoning:
+    enabled: true
+    mode: "qwen3_vllm"
+    # Qwen3.6 uses a boolean thinking switch rather than reasoning_effort.
+    effort: "medium"
+    include_reasoning: false
+    preserve_thinking: false
+    strip_visible_reasoning: true
+    reject_visible_reasoning: false
+    instruction: >
+      Use thinking mode to check caption evidence, evidence-source labels,
+      target condition, counterfactual contradiction basis, and forbidden
+      inferences. After thinking, return only the final JSON object that matches
+      the schema.
+  default:
+    temperature: 0.6
+    top_p: 0.95
+    max_tokens: 2048
+  claim_agent:
+    temperature: 0.6
+    top_p: 0.95
+    max_tokens: 2048
+  qa_agent:
+    temperature: 0.6
+    top_p: 0.95
+    max_tokens: 2048
+  verifier_agent:
+    temperature: 0.6
+    top_p: 0.95
+    max_tokens: 2048
+
+retry:
+  max_attempts: 3
+  initial_delay_s: 1.0
+  max_delay_s: 30.0
+  backoff_multiplier: 2.0
+  jitter_s: 0.25
+
+agents:
+  run_verifier: false
+  max_validation_attempts: 2
+  condition_sampling:
+    strategy: "cycle"
+    seed: 42
+  prompts:
+    claim_agent: "prompts/synthetic/claim_agent_v0.md"
+    qa_agent: "prompts/synthetic/qa_agent_v0.md"
+    verifier_agent: "prompts/synthetic/verifier_agent_v1.md"
+  prompt_version: "claim_agent_v0+qa_agent_v0+qwen3.6_thinking_v0"
+
+batching:
+  runner_max_concurrency: 64
+  unit_batch_size: 256

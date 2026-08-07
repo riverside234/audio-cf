@@ -9,6 +9,7 @@ from synthetic.infrastructure.llm_client import (
     LLMClientConfig,
     VLLMClient,
     VLLMHTTPError,
+    extract_message_text,
 )
 from synthetic.infrastructure.retry import RetryConfig
 
@@ -53,6 +54,16 @@ class StubAsyncClient:
 
 
 class VLLMClientTests(unittest.IsolatedAsyncioTestCase):
+    async def test_reasoning_only_response_has_actionable_error(self) -> None:
+        response = {
+            "choices": [
+                {"message": {"content": None, "reasoning_content": "private"}}
+            ]
+        }
+
+        with self.assertRaisesRegex(ValueError, "exhausted max_tokens"):
+            extract_message_text(response)
+
     async def test_400_preserves_vllm_detail_and_does_not_retry(self) -> None:
         transport = StubAsyncClient(
             [

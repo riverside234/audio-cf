@@ -1,0 +1,42 @@
+# Qwen3.6-35B-A3B-FP8 text-only server profile for:
+#
+#   vllm serve --config configs/vllm_server_qwen36.yaml
+#
+# Qwen recommends vLLM >= 0.19.0; requirements.txt currently uses >= 0.25.1.
+
+model: "/data/not_backed_up/yxu209/models/qwen"
+served-model-name: "qwen3.6-35b-a3b-fp8"
+generation-config: "vllm"
+
+host: "0.0.0.0"
+port: 8000
+uvicorn-log-level: "info"
+
+# The checkpoint contains FP8 weights; vLLM reads quantization from model config.
+dtype: "auto"
+max-model-len: 4096
+gpu-memory-utilization: 0.90
+max-num-seqs: 64
+max-num-batched-tokens: 16384
+
+enable-prefix-caching: true
+enable-chunked-prefill: true
+
+# Qwen3.6 emits <think>...</think>; qwen3 separates it from message.content.
+reasoning-parser: "qwen3"
+
+# This pipeline sends caption text only. Skip vision loading/profiling to leave
+# more memory for KV cache and concurrent requests.
+language-model-only: true
+
+# The official checkpoint includes mtp.safetensors. Start with two speculative
+# tokens as recommended by the Qwen model card; remove this mapping if MTP
+# causes a version-specific startup issue.
+speculative-config:
+  method: "qwen3_next_mtp"
+  num_speculative_tokens: 2
+
+tensor-parallel-size: 1
+download-dir: "/data/not_backed_up/yxu209/huggingface/cache"
+
+# trust-remote-code: false
