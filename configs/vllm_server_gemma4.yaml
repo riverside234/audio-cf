@@ -10,7 +10,7 @@ host: "0.0.0.0"
 port: 8000
 uvicorn-log-level: "info"
 
-dtype: "bfloat16"
+dtype: "auto"
 max-model-len: 4096
 gpu-memory-utilization: 0.90
 max-num-seqs: 32
