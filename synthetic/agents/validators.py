@@ -101,12 +101,27 @@ def validate_qa_record(
             "QA required_evidence_sources do not match claim evidence_sources."
         )
 
-    answer = str(qa_record.get("answer", "")).strip().lower()
-    claim_status = str(claim_record.get("claim_status", "")).strip().lower()
-    expected_word = "supported" if claim_status == "supported" else "contradicted"
-    if expected_word and expected_word not in answer:
+    question = str(qa_record.get("question", "")).strip()
+    if len(question.split()) < 6 or not question.endswith("?"):
         raise AgentValidationError(
-            f"answer should explicitly say the claim is {expected_word}."
+            "question must contain at least six words and end with '?'."
+        )
+
+    answer = _string_list(qa_record.get("answer"))
+    expected_class = str(claim_record.get("claim_type", "")).strip()
+    if answer[0] != expected_class:
+        raise AgentValidationError(
+            f"answer class must be {expected_class!r}, got {answer[0]!r}."
+        )
+    if answer[1:] != claim_sources:
+        raise AgentValidationError(
+            "answer source labels must exactly match claim evidence_sources in order."
+        )
+
+    answer_sources = _string_list(qa_record.get("answer_source"))
+    if answer_sources != claim_sources:
+        raise AgentValidationError(
+            "answer_source must exactly match claim evidence_sources in order."
         )
 
 

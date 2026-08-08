@@ -7,7 +7,8 @@ input:
   max_units: null
 
 output:
-  output_dir: "${cwd}/data/synthetic/clotho_audio_units_v0"
+  # v1 stores benchmark answers as [claim_type, *evidence_sources].
+  output_dir: "${cwd}/data/synthetic/clotho_audio_units_v1"
   # Large-run profile: keep canonical Parquet plus durable checkpoints, but
   # skip duplicate final JSONL and audit/review artifacts.
   # Completed batches remain here if generation is interrupted.

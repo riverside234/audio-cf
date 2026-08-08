@@ -6,10 +6,10 @@ import json
 from typing import Any, Dict, Mapping
 
 
-EXAMPLE_SCHEMA_VERSION = "synthetic_example_v0"
+EXAMPLE_SCHEMA_VERSION = "synthetic_example_v1"
 CLAIM_PROMPT_VERSION = "claim_agent_v2"
-QA_PROMPT_VERSION = "qa_agent_v2"
-VERIFIER_PROMPT_VERSION = "verifier_agent_v2"
+QA_PROMPT_VERSION = "qa_agent_v3"
+VERIFIER_PROMPT_VERSION = "verifier_agent_v3"
 VLLM_UNSUPPORTED_SCHEMA_KEYS = frozenset({"uniqueItems"})
 
 CLAIM_TYPES = ["faithful", "counterfactual"]
@@ -81,8 +81,16 @@ QA_OUTPUT_SCHEMA: Dict[str, Any] = {
     ],
     "properties": {
         "question": {"type": "string", "minLength": 1},
-        "answer": {"type": "string", "minLength": 1},
-        "answer_source": {"type": "string", "minLength": 1},
+        "answer": {
+            "type": "array",
+            "minItems": 2,
+            "items": {"type": "string", "minLength": 1},
+        },
+        "answer_source": {
+            "type": "array",
+            "items": EVIDENCE_SOURCE_SCHEMA,
+            "uniqueItems": True,
+        },
         "claim_evaluation_explanation": {"type": "string", "minLength": 1},
         "required_evidence_sources": {
             "type": "array",
