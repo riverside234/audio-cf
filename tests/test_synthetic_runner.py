@@ -196,7 +196,7 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
         runner = SyntheticGenerationRunner(
             claim_agent=ClaimAgent(
                 llm_client=fake_client,  # type: ignore[arg-type]
-                prompt_path=ROOT / "prompts" / "synthetic" / "claim_agent_v4.md",
+                prompt_path=ROOT / "prompts" / "synthetic" / "claim_agent_v5.md",
                 reasoning_policy=policy,
             ),
             qa_agent=QAAgent(
@@ -241,10 +241,12 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
 
     def test_claim_prompt_requires_atomic_and_careful_source_grounding(self) -> None:
         prompt = (
-            ROOT / "prompts" / "synthetic" / "claim_agent_v4.md"
+            ROOT / "prompts" / "synthetic" / "claim_agent_v5.md"
         ).read_text(encoding="utf-8")
 
         self.assertIn("complete, atomic sentence", prompt)
+        self.assertIn("one caption or several captions", prompt)
+        self.assertIn("converge on and strengthen one atomic proposition", prompt)
         self.assertIn("mutually incompatible alternative", prompt)
         self.assertIn("positive caption evidence from the same audio", prompt)
         self.assertIn("never move a fact between", prompt)
@@ -355,6 +357,39 @@ class VLLMResponseSchemaTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "must quote"):
             validate_claim_record(claim, target, audio_count=2)
+
+    def test_claim_can_use_multiple_captions_from_one_audio(self) -> None:
+        supported = valid_claim()
+        supported["supporting_caption_phrases"] = [
+            "Steady rain falls outside.",
+            "Rain taps against a roof.",
+        ]
+        validate_claim_record(supported, build_target_conditions(2)[0], audio_count=2)
+
+        contradicted = contradicted_claim()
+        contradicted["supporting_caption_phrases"] = [
+            "Steady rain falls outside.",
+            "Rain taps against a roof.",
+        ]
+        contradicted["contradiction_basis"] = (
+            "The evidence says 'Steady rain falls outside' and 'Rain taps against "
+            "a roof', both of which are incompatible with completely dry weather."
+        )
+        validate_claim_record(
+            contradicted,
+            build_target_conditions(2)[1],
+            audio_count=2,
+        )
+
+        contradicted["contradiction_basis"] = (
+            "Steady rain falls outside, which conflicts with dry weather."
+        )
+        with self.assertRaisesRegex(ValueError, "every supporting caption phrase"):
+            validate_claim_record(
+                contradicted,
+                build_target_conditions(2)[1],
+                audio_count=2,
+            )
 
     def test_generation_targets_have_one_determining_source(self) -> None:
         for audio_count in (1, 2, 3, 5):

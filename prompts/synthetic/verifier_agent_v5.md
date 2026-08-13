@@ -22,8 +22,9 @@ Return exactly one JSON object with these keys: verifier_status, validation_erro
 
 Checks:
 - Only SUPPORTED and CONTRADICTED are valid final labels.
-- SUPPORTED requires an explicit caption fact from the sole evidence audio.
-- CONTRADICTED requires positive caption evidence from that same audio that is mutually incompatible with the claim.
+- SUPPORTED requires one atomic fact explicitly established by one or more captions from the sole evidence audio.
+- CONTRADICTED requires one or more captions from that same audio that converge on an atomic proposition mutually incompatible with the claim.
+- When supporting_caption_phrases contains multiple items, each must come from the sole evidence audio, support the same proposition, and appear in contradiction_basis for a contradicted claim.
 - Caption omission, an unrelated event, or a fact from another audio does not prove contradiction.
 - Reject every cross-audio source swap.
 - The question must be complete, natural, and ask for the evidence judgment and determining audio.

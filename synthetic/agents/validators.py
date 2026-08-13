@@ -88,13 +88,14 @@ def validate_claim_record(
     if not contradiction_basis:
         raise AgentValidationError("Counterfactual claims need contradiction_basis.")
     normalized_basis = _normalize_words(contradiction_basis)
-    if not any(
-        _normalize_words(phrase) in normalized_basis
+    normalized_phrases = [
+        _normalize_words(phrase)
         for phrase in supporting_phrases
         if _normalize_words(phrase)
-    ):
+    ]
+    if not all(phrase in normalized_basis for phrase in normalized_phrases):
         raise AgentValidationError(
-            "Counterfactual contradiction_basis must quote a supporting caption phrase."
+            "Counterfactual contradiction_basis must quote every supporting caption phrase."
         )
     if _uses_caption_absence_as_negative_evidence(contradiction_basis):
         raise AgentValidationError(

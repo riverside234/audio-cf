@@ -41,7 +41,9 @@ Final benchmark answers contain exactly two labels: an evidence judgment and its
 single determining source. Valid forms are `["supported", "AUDIO_1"]` and
 `["contradicted", "AUDIO_2"]`. Supported claims require explicit caption
 support; contradicted claims require positive, mutually incompatible caption
-evidence from the same audio. Other cases and source swaps are excluded.
+evidence from the same audio. Evidence may use one or several captions from that
+audio when they converge on one atomic proposition. Other cases and source swaps
+are excluded.
 The default output directory is `data/synthetic/clotho_audio_units_v3`; do not
 append these rows to an older checkpoint with a different answer contract.
 
