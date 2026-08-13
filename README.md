@@ -37,11 +37,11 @@ captions from target-relevant sources, QAAgent receives the validated claim
 instead of the raw captions, and VerifierAgent independently receives relevant
 captions when enabled. File names, IDs, full schemas, and unrelated retry errors
 are excluded from prompts.
-Final benchmark answers are lists whose first item is `faithful` or
-`counterfactual` and whose remaining items are the evidence source labels, for
-example `["counterfactual", "AUDIO_1"]`.
-The default output directory is `data/synthetic/clotho_audio_units_v1`; do not
-append these list-answer rows to an older v0 checkpoint containing prose answers.
+Final benchmark answers contain exactly two labels: an evidence judgment and its
+single determining source. Valid forms are `["supported", "AUDIO_1"]`,
+`["contradicted", "AUDIO_2"]`, and `["unsupported", "NONE"]`.
+The default output directory is `data/synthetic/clotho_audio_units_v2`; do not
+append these rows to an older checkpoint with a different answer contract.
 
 ```bash
 python data_filter.py --config configs/data_filter.yaml --overwrite

@@ -97,11 +97,56 @@ def _basic_validate(payload: Mapping[str, Any], schema: Mapping[str, Any]) -> No
     for field, field_schema in properties.items():
         if field not in payload or not isinstance(field_schema, dict):
             continue
+        field_value = payload[field]
         expected_type = field_schema.get("type")
-        if expected_type and not _matches_json_type(payload[field], expected_type):
+        if expected_type and not _matches_json_type(field_value, expected_type):
             raise SchemaValidationError(
                 f"Field {field!r} expected JSON type {expected_type!r}, "
-                f"got {type(payload[field]).__name__}."
+                f"got {type(field_value).__name__}."
+            )
+        if "enum" in field_schema and field_value not in field_schema["enum"]:
+            raise SchemaValidationError(
+                f"Field {field!r} must be one of {field_schema['enum']!r}."
+            )
+        if isinstance(field_value, str):
+            min_length = field_schema.get("minLength")
+            if isinstance(min_length, int) and len(field_value) < min_length:
+                raise SchemaValidationError(
+                    f"Field {field!r} must contain at least {min_length} characters."
+                )
+        if isinstance(field_value, list):
+            _basic_validate_array(field, field_value, field_schema)
+
+
+def _basic_validate_array(
+    field: str,
+    value: list[Any],
+    schema: Mapping[str, Any],
+) -> None:
+    min_items = schema.get("minItems")
+    if isinstance(min_items, int) and len(value) < min_items:
+        raise SchemaValidationError(
+            f"Field {field!r} must contain at least {min_items} items."
+        )
+    max_items = schema.get("maxItems")
+    if isinstance(max_items, int) and len(value) > max_items:
+        raise SchemaValidationError(
+            f"Field {field!r} must contain at most {max_items} items."
+        )
+    if schema.get("uniqueItems"):
+        serialized = [json.dumps(item, sort_keys=True) for item in value]
+        if len(serialized) != len(set(serialized)):
+            raise SchemaValidationError(f"Field {field!r} must contain unique items.")
+
+    item_schema = schema.get("items")
+    if not isinstance(item_schema, Mapping):
+        return
+    expected_type = item_schema.get("type")
+    for index, item in enumerate(value):
+        if expected_type and not _matches_json_type(item, expected_type):
+            raise SchemaValidationError(
+                f"Field {field!r} item {index} expected JSON type "
+                f"{expected_type!r}, got {type(item).__name__}."
             )
 
 

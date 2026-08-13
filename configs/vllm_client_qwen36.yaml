@@ -72,9 +72,9 @@ agents:
     seed: 42
   prompts:
     claim_agent: "prompts/synthetic/claim_agent_v2.md"
-    qa_agent: "prompts/synthetic/qa_agent_v3.md"
-    verifier_agent: "prompts/synthetic/verifier_agent_v3.md"
-  prompt_version: "claim_agent_v2+qa_agent_v3+verifier_agent_v3+qwen3.6_thinking_v2"
+    qa_agent: "prompts/synthetic/qa_agent_v4.md"
+    verifier_agent: "prompts/synthetic/verifier_agent_v4.md"
+  prompt_version: "claim_agent_v2+qa_agent_v4+verifier_agent_v4+qwen3.6_thinking_v3"
 
 batching:
   runner_max_concurrency: 64

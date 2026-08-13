@@ -97,32 +97,17 @@ def build_target_conditions(audio_count: int) -> List[TargetCondition]:
         )
     )
 
-    if audio_count >= 3:
-        conditions.append(
-            TargetCondition(
-                condition_name=f"faithful_multi_source_{labels[0]}_{labels[2]}",
-                claim_type="faithful",
-                claim_status="SUPPORTED",
-                evidence_sources=[labels[0], labels[2]],
-                counterfactual_edit_type="none",
-                instruction=(
-                    f"Create one short faithful claim that requires explicit caption "
-                    f"facts from both {labels[0]} and {labels[2]}."
-                ),
-            )
-        )
-
     conditions.append(
         TargetCondition(
-            condition_name=f"counterfactual_false_conjunction_{labels[0]}_{labels[1]}",
+            condition_name=f"counterfactual_explicit_fact_modification_{labels[0]}",
             claim_type="counterfactual",
             claim_status="CONTRADICTED",
-            evidence_sources=[labels[0], labels[1]],
-            counterfactual_edit_type="false_conjunction",
+            evidence_sources=[labels[0]],
+            counterfactual_edit_type="explicit_fact_modification",
             instruction=(
-                f"Create one short counterfactual claim that falsely says the same "
-                f"explicit caption fact is present in both {labels[0]} and {labels[1]} "
-                f"when the caption evidence assigns it to only one source."
+                f"Create one short counterfactual claim that directly changes an "
+                f"explicit caption-supported fact from {labels[0]}. Do not use absence "
+                f"from captions as negative evidence."
             ),
         )
     )

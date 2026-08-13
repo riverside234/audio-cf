@@ -108,14 +108,10 @@ def validate_qa_record(
         )
 
     answer = _string_list(qa_record.get("answer"))
-    expected_class = str(claim_record.get("claim_type", "")).strip()
-    if answer[0] != expected_class:
+    expected_answer = _benchmark_answer(claim_record)
+    if answer != expected_answer:
         raise AgentValidationError(
-            f"answer class must be {expected_class!r}, got {answer[0]!r}."
-        )
-    if answer[1:] != claim_sources:
-        raise AgentValidationError(
-            "answer source labels must exactly match claim evidence_sources in order."
+            f"answer must be {expected_answer!r}, got {answer!r}."
         )
 
     answer_sources = _string_list(qa_record.get("answer_source"))
@@ -123,6 +119,32 @@ def validate_qa_record(
         raise AgentValidationError(
             "answer_source must exactly match claim evidence_sources in order."
         )
+
+
+def _benchmark_answer(claim_record: Mapping[str, Any]) -> List[str]:
+    status = str(claim_record.get("claim_status", "")).strip()
+    sources = _string_list(claim_record.get("evidence_sources"))
+
+    if status == "UNSUPPORTED":
+        if sources:
+            raise AgentValidationError(
+                "UNSUPPORTED claims must have empty evidence_sources."
+            )
+        return ["unsupported", "NONE"]
+
+    label_by_status = {
+        "SUPPORTED": "supported",
+        "CONTRADICTED": "contradicted",
+    }
+    if status not in label_by_status:
+        raise AgentValidationError(
+            f"claim_status {status!r} cannot be represented by the benchmark answer."
+        )
+    if len(sources) != 1:
+        raise AgentValidationError(
+            f"{status} benchmark claims must have exactly one evidence source."
+        )
+    return [label_by_status[status], sources[0]]
 
 
 def validate_verifier_record(verifier_record: Mapping[str, Any], audio_count: int) -> None:

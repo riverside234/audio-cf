@@ -13,6 +13,7 @@ from synthetic.agents import (
     ReasoningPolicy,
     SyntheticGenerationRunner,
 )
+from synthetic.agents.conditions import build_target_conditions
 from synthetic.agents.schemas import (
     CLAIM_OUTPUT_SCHEMA,
     EXAMPLE_SCHEMA_VERSION,
@@ -73,7 +74,7 @@ class SyntheticGenerationRunnerTests(unittest.IsolatedAsyncioTestCase):
         assert state.final_example is not None
         self.assertEqual(state.final_example["schema_version"], EXAMPLE_SCHEMA_VERSION)
         self.assertEqual(state.final_example["claim_status"], "SUPPORTED")
-        self.assertEqual(state.final_example["answer"], ["faithful", "AUDIO_1"])
+        self.assertEqual(state.final_example["answer"], ["supported", "AUDIO_1"])
         provenance_fields = {
             "example_id",
             "unit_id",
@@ -116,9 +117,9 @@ class SyntheticGenerationRunnerTests(unittest.IsolatedAsyncioTestCase):
             fake_client.calls[2]["messages"][0]["content"],
         )
 
-    async def test_qa_answer_class_and_sources_are_retried(self) -> None:
+    async def test_qa_answer_judgment_and_source_are_retried(self) -> None:
         invalid_qa = valid_qa()
-        invalid_qa["answer"] = ["counterfactual", "AUDIO_2"]
+        invalid_qa["answer"] = ["contradicted", "AUDIO_2"]
         fake_client = FakeLLMClient(
             [
                 json.dumps(valid_claim()),
@@ -131,8 +132,11 @@ class SyntheticGenerationRunnerTests(unittest.IsolatedAsyncioTestCase):
         state = await runner.run_unit(audio_unit(), unit_index=0)
 
         self.assertEqual(len(fake_client.calls), 3)
-        self.assertEqual(state.final_example["answer"], ["faithful", "AUDIO_1"])
-        self.assertIn("answer class must be 'faithful'", state.validation_errors[0])
+        self.assertEqual(state.final_example["answer"], ["supported", "AUDIO_1"])
+        self.assertIn(
+            "answer must be ['supported', 'AUDIO_1']",
+            state.validation_errors[0],
+        )
 
     def _runner(self, fake_client: FakeLLMClient) -> SyntheticGenerationRunner:
         policy = ReasoningPolicy(strip_visible_reasoning=True)
@@ -185,7 +189,7 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
             ),
             qa_agent=QAAgent(
                 llm_client=fake_client,  # type: ignore[arg-type]
-                prompt_path=ROOT / "prompts" / "synthetic" / "qa_agent_v3.md",
+                prompt_path=ROOT / "prompts" / "synthetic" / "qa_agent_v4.md",
                 reasoning_policy=policy,
             ),
         )
@@ -208,18 +212,20 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
 
     def test_qa_prompt_allows_varied_questions_and_canonical_answers(self) -> None:
         prompt = (
-            ROOT / "prompts" / "synthetic" / "qa_agent_v3.md"
+            ROOT / "prompts" / "synthetic" / "qa_agent_v4.md"
         ).read_text(encoding="utf-8")
 
         self.assertIn("naturally varied question", prompt)
         self.assertIn("use only the distinguishing part", prompt)
         self.assertIn("Do not repeatedly use the template", prompt)
-        self.assertIn('["counterfactual", "AUDIO_1"]', prompt)
+        self.assertIn('["contradicted", "AUDIO_2"]', prompt)
+        self.assertIn('["unsupported", "NONE"]', prompt)
+        self.assertIn("Never put claim_type values", prompt)
 
         verifier_prompt = (
-            ROOT / "prompts" / "synthetic" / "verifier_agent_v3.md"
+            ROOT / "prompts" / "synthetic" / "verifier_agent_v4.md"
         ).read_text(encoding="utf-8")
-        self.assertIn("first item exactly equals claim_type", verifier_prompt)
+        self.assertIn('UNSUPPORTED to ["unsupported", "NONE"]', verifier_prompt)
 
     def test_claim_prompt_requires_atomic_and_careful_source_grounding(self) -> None:
         prompt = (
@@ -288,15 +294,59 @@ class VLLMResponseSchemaTests(unittest.TestCase):
         with self.assertRaises(SchemaValidationError):
             validate_json(qa, QA_OUTPUT_SCHEMA)
 
-    def test_multi_source_answer_appends_sources_in_order(self) -> None:
+        qa["answer"] = ["supported", "AUDIO_1", "AUDIO_2"]
+        with self.assertRaises(SchemaValidationError):
+            validate_json(qa, QA_OUTPUT_SCHEMA)
+
+    def test_multi_source_answer_is_rejected_by_fixed_benchmark_contract(self) -> None:
         claim = valid_claim()
         claim["evidence_sources"] = ["AUDIO_1", "AUDIO_2"]
         qa = valid_qa()
-        qa["answer"] = ["faithful", "AUDIO_1", "AUDIO_2"]
+        qa["answer"] = ["supported", "AUDIO_1"]
         qa["answer_source"] = ["AUDIO_1", "AUDIO_2"]
         qa["required_evidence_sources"] = ["AUDIO_1", "AUDIO_2"]
 
+        with self.assertRaisesRegex(
+            ValueError,
+            "must have exactly one evidence source",
+        ):
+            validate_qa_record(qa, claim, audio_count=2)
+
+    def test_unsupported_answer_uses_none_and_empty_source_lists(self) -> None:
+        claim = valid_claim()
+        claim["claim_status"] = "UNSUPPORTED"
+        claim["evidence_sources"] = []
+        qa = valid_qa()
+        qa["answer"] = ["unsupported", "NONE"]
+        qa["answer_source"] = []
+        qa["required_evidence_sources"] = []
+
         validate_qa_record(qa, claim, audio_count=2)
+
+        qa["answer"] = ["unsupported", "AUDIO_1"]
+        with self.assertRaisesRegex(ValueError, r"\['unsupported', 'NONE'\]"):
+            validate_qa_record(qa, claim, audio_count=2)
+
+    def test_contradicted_answer_uses_its_determining_source(self) -> None:
+        claim = valid_claim()
+        claim["claim_type"] = "counterfactual"
+        claim["claim_status"] = "CONTRADICTED"
+        claim["evidence_sources"] = ["AUDIO_2"]
+        qa = valid_qa()
+        qa["answer"] = ["contradicted", "AUDIO_2"]
+        qa["answer_source"] = ["AUDIO_2"]
+        qa["required_evidence_sources"] = ["AUDIO_2"]
+
+        validate_qa_record(qa, claim, audio_count=2)
+
+    def test_generation_targets_have_one_determining_source(self) -> None:
+        for audio_count in (1, 2, 3, 5):
+            with self.subTest(audio_count=audio_count):
+                conditions = build_target_conditions(audio_count)
+                self.assertTrue(conditions)
+                self.assertTrue(
+                    all(len(condition.evidence_sources) == 1 for condition in conditions)
+                )
 
 
 def audio_unit() -> Dict[str, Any]:
@@ -332,7 +382,7 @@ def valid_claim() -> Dict[str, Any]:
 def valid_qa() -> Dict[str, Any]:
     return {
         "question": "How should the rainfall description be classified, and which audio supports it?",
-        "answer": ["faithful", "AUDIO_1"],
+        "answer": ["supported", "AUDIO_1"],
         "answer_source": ["AUDIO_1"],
         "claim_evaluation_explanation": "AUDIO_1 explicitly describes steady rain.",
         "required_evidence_sources": ["AUDIO_1"],
