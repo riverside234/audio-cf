@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from typing import Any, Dict, Iterable, List, Mapping, Sequence
 
 from synthetic.infrastructure.schema_io import SchemaValidationError, validate_json
@@ -63,39 +64,38 @@ def validate_claim_record(
             "evidence_sources do not match target condition: "
             f"{evidence_sources} != {target_condition.evidence_sources}"
         )
+    if len(evidence_sources) != 1:
+        raise AgentValidationError(
+            "Binary benchmark claims must have exactly one evidence source."
+        )
 
     claim_text = str(claim_record.get("claim_text", "")).strip()
     if len(claim_text.split()) < 3:
         raise AgentValidationError("claim_text is too short.")
 
     supporting_phrases = _string_list(claim_record.get("supporting_caption_phrases"))
-    if claim_record.get("claim_status") == "SUPPORTED" and not supporting_phrases:
-        raise AgentValidationError("SUPPORTED claims need supporting_caption_phrases.")
+    if not supporting_phrases:
+        raise AgentValidationError(
+            "Claims need supporting_caption_phrases containing positive evidence."
+        )
 
     if claim_record.get("claim_type") == "faithful":
         if claim_record.get("counterfactual_edit_type") != "none":
             raise AgentValidationError("Faithful claims must use edit type 'none'.")
         return
 
-    status = str(claim_record.get("claim_status", "")).strip()
     contradiction_basis = str(claim_record.get("contradiction_basis", "")).strip()
-    if status == "UNSUPPORTED":
-        if evidence_sources:
-            raise AgentValidationError(
-                "UNSUPPORTED claims must have empty evidence_sources."
-            )
-        if supporting_phrases:
-            raise AgentValidationError(
-                "UNSUPPORTED claims must have empty supporting_caption_phrases."
-            )
-        if contradiction_basis.lower() not in {"", "none", "n/a"}:
-            raise AgentValidationError(
-                "UNSUPPORTED claims must not claim explicit contradictory evidence."
-            )
-        return
-
     if not contradiction_basis:
         raise AgentValidationError("Counterfactual claims need contradiction_basis.")
+    normalized_basis = _normalize_words(contradiction_basis)
+    if not any(
+        _normalize_words(phrase) in normalized_basis
+        for phrase in supporting_phrases
+        if _normalize_words(phrase)
+    ):
+        raise AgentValidationError(
+            "Counterfactual contradiction_basis must quote a supporting caption phrase."
+        )
     if _uses_caption_absence_as_negative_evidence(contradiction_basis):
         raise AgentValidationError(
             "Counterfactual contradiction_basis relies on caption absence."
@@ -140,13 +140,6 @@ def validate_qa_record(
 def _benchmark_answer(claim_record: Mapping[str, Any]) -> List[str]:
     status = str(claim_record.get("claim_status", "")).strip()
     sources = _string_list(claim_record.get("evidence_sources"))
-
-    if status == "UNSUPPORTED":
-        if sources:
-            raise AgentValidationError(
-                "UNSUPPORTED claims must have empty evidence_sources."
-            )
-        return ["unsupported", "NONE"]
 
     label_by_status = {
         "SUPPORTED": "supported",
@@ -233,6 +226,10 @@ def _uses_caption_absence_as_negative_evidence(text: str) -> bool:
         "not in the captions",
     ]
     return any(flag in lowered for flag in red_flags)
+
+
+def _normalize_words(text: str) -> str:
+    return " ".join(re.findall(r"[a-z0-9]+", text.lower()))
 
 
 def _example_id(unit_id: str, claim_text: str, question: str) -> str:

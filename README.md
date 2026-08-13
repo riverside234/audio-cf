@@ -38,11 +38,11 @@ instead of the raw captions, and VerifierAgent independently receives relevant
 captions when enabled. File names, IDs, full schemas, and unrelated retry errors
 are excluded from prompts.
 Final benchmark answers contain exactly two labels: an evidence judgment and its
-single determining source. Valid forms are `["supported", "AUDIO_1"]`,
-`["contradicted", "AUDIO_2"]`, and `["unsupported", "NONE"]`.
-The sampler includes one unsupported-detail target whose evidence and
-answer-source lists are empty.
-The default output directory is `data/synthetic/clotho_audio_units_v2`; do not
+single determining source. Valid forms are `["supported", "AUDIO_1"]` and
+`["contradicted", "AUDIO_2"]`. Supported claims require explicit caption
+support; contradicted claims require positive, mutually incompatible caption
+evidence from the same audio. Other cases and source swaps are excluded.
+The default output directory is `data/synthetic/clotho_audio_units_v3`; do not
 append these rows to an older checkpoint with a different answer contract.
 
 ```bash

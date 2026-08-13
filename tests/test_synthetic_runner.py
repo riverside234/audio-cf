@@ -138,17 +138,17 @@ class SyntheticGenerationRunnerTests(unittest.IsolatedAsyncioTestCase):
             state.validation_errors[0],
         )
 
-    async def test_runner_generates_unsupported_none_example(self) -> None:
+    async def test_runner_generates_same_audio_contradiction(self) -> None:
         fake_client = FakeLLMClient(
-            [json.dumps(unsupported_claim()), json.dumps(unsupported_qa())]
+            [json.dumps(contradicted_claim()), json.dumps(contradicted_qa())]
         )
         runner = self._runner(fake_client)
 
-        state = await runner.run_unit(audio_unit(), unit_index=2)
+        state = await runner.run_unit(audio_unit(), unit_index=1)
 
-        self.assertEqual(state.target_condition["claim_status"], "UNSUPPORTED")
-        self.assertEqual(state.final_example["evidence_sources"], [])
-        self.assertEqual(state.final_example["answer"], ["unsupported", "NONE"])
+        self.assertEqual(state.target_condition["claim_status"], "CONTRADICTED")
+        self.assertEqual(state.target_condition["evidence_sources"], ["AUDIO_1"])
+        self.assertEqual(state.final_example["answer"], ["contradicted", "AUDIO_1"])
 
     def _runner(self, fake_client: FakeLLMClient) -> SyntheticGenerationRunner:
         policy = ReasoningPolicy(strip_visible_reasoning=True)
@@ -196,12 +196,12 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
         runner = SyntheticGenerationRunner(
             claim_agent=ClaimAgent(
                 llm_client=fake_client,  # type: ignore[arg-type]
-                prompt_path=ROOT / "prompts" / "synthetic" / "claim_agent_v3.md",
+                prompt_path=ROOT / "prompts" / "synthetic" / "claim_agent_v4.md",
                 reasoning_policy=policy,
             ),
             qa_agent=QAAgent(
                 llm_client=fake_client,  # type: ignore[arg-type]
-                prompt_path=ROOT / "prompts" / "synthetic" / "qa_agent_v4.md",
+                prompt_path=ROOT / "prompts" / "synthetic" / "qa_agent_v5.md",
                 reasoning_policy=policy,
             ),
         )
@@ -224,31 +224,31 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
 
     def test_qa_prompt_allows_varied_questions_and_canonical_answers(self) -> None:
         prompt = (
-            ROOT / "prompts" / "synthetic" / "qa_agent_v4.md"
+            ROOT / "prompts" / "synthetic" / "qa_agent_v5.md"
         ).read_text(encoding="utf-8")
 
         self.assertIn("naturally varied question", prompt)
-        self.assertIn("use only the distinguishing part", prompt)
+        self.assertIn("distinguishing part", prompt)
         self.assertIn("Do not repeatedly use the template", prompt)
-        self.assertIn('["contradicted", "AUDIO_2"]', prompt)
-        self.assertIn('["unsupported", "NONE"]', prompt)
-        self.assertIn("Never put claim_type values", prompt)
+        self.assertIn('["contradicted", "AUDIO_N"]', prompt)
+        self.assertIn('Never use "unsupported"', prompt)
 
         verifier_prompt = (
-            ROOT / "prompts" / "synthetic" / "verifier_agent_v4.md"
+            ROOT / "prompts" / "synthetic" / "verifier_agent_v5.md"
         ).read_text(encoding="utf-8")
-        self.assertIn('UNSUPPORTED to ["unsupported", "NONE"]', verifier_prompt)
+        self.assertIn("Reject every cross-audio source swap", verifier_prompt)
+        self.assertIn("Caption omission", verifier_prompt)
 
     def test_claim_prompt_requires_atomic_and_careful_source_grounding(self) -> None:
         prompt = (
-            ROOT / "prompts" / "synthetic" / "claim_agent_v3.md"
+            ROOT / "prompts" / "synthetic" / "claim_agent_v4.md"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("one atomic event or attribute", prompt)
-        self.assertIn("contradiction_basis to \"none\"", prompt)
-        self.assertIn("caption silence as proof", prompt)
-        self.assertIn("change only the requested dimension", prompt)
-        self.assertIn("For unsupported_detail", prompt)
+        self.assertIn("complete, atomic sentence", prompt)
+        self.assertIn("mutually incompatible alternative", prompt)
+        self.assertIn("positive caption evidence from the same audio", prompt)
+        self.assertIn("never move a fact between", prompt)
+        self.assertIn("captions omit it", prompt)
 
     def test_source_references_and_feedback_are_bounded(self) -> None:
         labels = prompt_audio_source_labels(
@@ -325,15 +325,16 @@ class VLLMResponseSchemaTests(unittest.TestCase):
         ):
             validate_qa_record(qa, claim, audio_count=2)
 
-    def test_unsupported_answer_uses_none_and_empty_source_lists(self) -> None:
-        claim = unsupported_claim()
-        qa = unsupported_qa()
+    def test_unsupported_status_and_answer_are_rejected(self) -> None:
+        claim = valid_claim()
+        claim["claim_status"] = "UNSUPPORTED"
+        with self.assertRaises(SchemaValidationError):
+            validate_json(claim, CLAIM_OUTPUT_SCHEMA)
 
-        validate_qa_record(qa, claim, audio_count=2)
-
-        qa["answer"] = ["unsupported", "AUDIO_1"]
-        with self.assertRaisesRegex(ValueError, r"\['unsupported', 'NONE'\]"):
-            validate_qa_record(qa, claim, audio_count=2)
+        qa = valid_qa()
+        qa["answer"] = ["unsupported", "NONE"]
+        with self.assertRaisesRegex(ValueError, r"\['supported', 'AUDIO_1'\]"):
+            validate_qa_record(qa, valid_claim(), audio_count=2)
 
     def test_contradicted_answer_uses_its_determining_source(self) -> None:
         claim = valid_claim()
@@ -347,34 +348,32 @@ class VLLMResponseSchemaTests(unittest.TestCase):
 
         validate_qa_record(qa, claim, audio_count=2)
 
+    def test_contradiction_basis_must_quote_positive_caption_evidence(self) -> None:
+        claim = contradicted_claim()
+        claim["contradiction_basis"] = "The generated claim is incorrect."
+        target = build_target_conditions(2)[1]
+
+        with self.assertRaisesRegex(ValueError, "must quote"):
+            validate_claim_record(claim, target, audio_count=2)
+
     def test_generation_targets_have_one_determining_source(self) -> None:
         for audio_count in (1, 2, 3, 5):
             with self.subTest(audio_count=audio_count):
                 conditions = build_target_conditions(audio_count)
-                self.assertTrue(conditions)
-                unsupported = [
-                    condition
-                    for condition in conditions
-                    if condition.claim_status == "UNSUPPORTED"
-                ]
-                self.assertEqual(len(unsupported), 1)
-                self.assertEqual(unsupported[0].evidence_sources, [])
+                self.assertEqual(len(conditions), 2 * audio_count)
+                statuses = [condition.claim_status for condition in conditions]
+                self.assertEqual(statuses.count("SUPPORTED"), audio_count)
+                self.assertEqual(statuses.count("CONTRADICTED"), audio_count)
                 self.assertTrue(
-                    all(
-                        len(condition.evidence_sources) == 1
-                        for condition in conditions
-                        if condition.claim_status != "UNSUPPORTED"
-                    )
+                    all(len(condition.evidence_sources) == 1 for condition in conditions)
                 )
-
-    def test_unsupported_claim_has_no_evidence_or_contradiction(self) -> None:
-        target = next(
-            condition
-            for condition in build_target_conditions(2)
-            if condition.claim_status == "UNSUPPORTED"
-        )
-
-        validate_claim_record(unsupported_claim(), target, audio_count=2)
+                self.assertNotIn(
+                    "source_swap",
+                    {condition.counterfactual_edit_type for condition in conditions},
+                )
+                self.assertTrue(
+                    all("source_swap" not in condition.condition_name for condition in conditions)
+                )
 
 
 def audio_unit() -> Dict[str, Any]:
@@ -417,33 +416,31 @@ def valid_qa() -> Dict[str, Any]:
     }
 
 
-def unsupported_claim() -> Dict[str, Any]:
+def contradicted_claim() -> Dict[str, Any]:
     claim = valid_claim()
     claim.update(
         {
-            "claim_text": "Steady rain falls outside during the morning.",
+            "claim_text": "The weather outside is completely dry.",
             "claim_type": "counterfactual",
-            "claim_status": "UNSUPPORTED",
-            "evidence_sources": [],
-            "counterfactual_edit_type": "unsupported_detail",
-            "supporting_caption_phrases": [],
-            "contradiction_basis": "none",
-            "confidence": 0.9,
+            "claim_status": "CONTRADICTED",
+            "counterfactual_edit_type": "explicit_fact_modification",
+            "contradiction_basis": (
+                "The caption explicitly says steady rain falls outside, which is "
+                "incompatible with completely dry weather."
+            ),
         }
     )
     return claim
 
 
-def unsupported_qa() -> Dict[str, Any]:
+def contradicted_qa() -> Dict[str, Any]:
     qa = valid_qa()
     qa.update(
         {
-            "answer": ["unsupported", "NONE"],
-            "answer_source": [],
+            "answer": ["contradicted", "AUDIO_1"],
             "claim_evaluation_explanation": (
-                "No caption establishes or contradicts the morning detail."
+                "AUDIO_1 explicitly describes rain, contradicting completely dry weather."
             ),
-            "required_evidence_sources": [],
         }
     )
     return qa

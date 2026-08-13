@@ -49,83 +49,21 @@ def build_target_conditions(audio_count: int) -> List[TargetCondition]:
                 ),
             )
         )
-
-    conditions.append(
-        TargetCondition(
-            condition_name="counterfactual_unsupported_detail",
-            claim_type="counterfactual",
-            claim_status="UNSUPPORTED",
-            evidence_sources=[],
-            counterfactual_edit_type="unsupported_detail",
-            instruction=(
-                "Create one short plausible claim by adding one concrete detail that "
-                "is neither supported nor explicitly contradicted by any provided "
-                "caption. This is unsupported, not contradicted."
-            ),
-        )
-    )
-
-    if audio_count == 1:
         conditions.append(
             TargetCondition(
-                condition_name="single_audio_explicit_fact_modification",
+                condition_name=f"counterfactual_explicit_contradiction_{label}",
                 claim_type="counterfactual",
                 claim_status="CONTRADICTED",
-                evidence_sources=[labels[0]],
+                evidence_sources=[label],
                 counterfactual_edit_type="explicit_fact_modification",
                 instruction=(
-                    "Create one short counterfactual claim that directly changes an "
-                    "explicit caption-supported fact from AUDIO_1. Do not use absence "
-                    "from captions as negative evidence."
+                    f"Create one short claim about {label} that directly changes one "
+                    "explicit caption fact into a mutually incompatible alternative. "
+                    f"The positive caption evidence from {label} must prove the "
+                    "contradiction; do not rely on omission or another audio source."
                 ),
             )
         )
-        return conditions
-
-    conditions.append(
-        TargetCondition(
-            condition_name=f"counterfactual_source_swap_{labels[0]}_to_{labels[1]}",
-            claim_type="counterfactual",
-            claim_status="CONTRADICTED",
-            evidence_sources=[labels[0]],
-            counterfactual_edit_type="source_swap",
-            instruction=(
-                f"Take one explicit caption fact from {labels[0]} and write a claim "
-                f"that incorrectly assigns it to {labels[1]}. The evidence source "
-                f"should remain {labels[0]} because it proves the swap."
-            ),
-        )
-    )
-    conditions.append(
-        TargetCondition(
-            condition_name=f"counterfactual_event_or_attribute_swap_{labels[1]}",
-            claim_type="counterfactual",
-            claim_status="CONTRADICTED",
-            evidence_sources=[labels[1]],
-            counterfactual_edit_type="event_swap",
-            instruction=(
-                f"Create one short counterfactual claim that changes an explicit "
-                f"caption-supported event or attribute from {labels[1]} into a "
-                f"different event or attribute. Do not invent private, demographic, "
-                f"emotional, or exact-count details."
-            ),
-        )
-    )
-
-    conditions.append(
-        TargetCondition(
-            condition_name=f"counterfactual_explicit_fact_modification_{labels[0]}",
-            claim_type="counterfactual",
-            claim_status="CONTRADICTED",
-            evidence_sources=[labels[0]],
-            counterfactual_edit_type="explicit_fact_modification",
-            instruction=(
-                f"Create one short counterfactual claim that directly changes an "
-                f"explicit caption-supported fact from {labels[0]}. Do not use absence "
-                f"from captions as negative evidence."
-            ),
-        )
-    )
     return conditions
 
 

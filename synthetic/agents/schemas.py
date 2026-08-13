@@ -6,28 +6,19 @@ import json
 from typing import Any, Dict, Mapping
 
 
-EXAMPLE_SCHEMA_VERSION = "synthetic_example_v2"
-CLAIM_PROMPT_VERSION = "claim_agent_v3"
-QA_PROMPT_VERSION = "qa_agent_v4"
-VERIFIER_PROMPT_VERSION = "verifier_agent_v4"
+EXAMPLE_SCHEMA_VERSION = "synthetic_example_v3"
+CLAIM_PROMPT_VERSION = "claim_agent_v4"
+QA_PROMPT_VERSION = "qa_agent_v5"
+VERIFIER_PROMPT_VERSION = "verifier_agent_v5"
 VLLM_UNSUPPORTED_SCHEMA_KEYS = frozenset({"uniqueItems"})
 
 CLAIM_TYPES = ["faithful", "counterfactual"]
-CLAIM_STATUSES = [
-    "SUPPORTED",
-    "CONTRADICTED",
-    "UNSUPPORTED",
-    "PARTIALLY_SUPPORTED",
-]
+CLAIM_STATUSES = ["SUPPORTED", "CONTRADICTED"]
 COUNTERFACTUAL_EDIT_TYPES = [
     "none",
-    "source_swap",
     "event_swap",
     "attribute_swap",
-    "false_conjunction",
-    "false_exclusion",
     "explicit_fact_modification",
-    "unsupported_detail",
 ]
 
 EVIDENCE_SOURCE_SCHEMA = {
@@ -126,13 +117,7 @@ VERIFIER_OUTPUT_SCHEMA: Dict[str, Any] = {
         "validation_notes": {"type": "string"},
         "corrected_claim_status": {
             "type": ["string", "null"],
-            "enum": [
-                "SUPPORTED",
-                "CONTRADICTED",
-                "UNSUPPORTED",
-                "PARTIALLY_SUPPORTED",
-                None,
-            ],
+            "enum": ["SUPPORTED", "CONTRADICTED", None],
         },
         "corrected_evidence_sources": {
             "type": "array",

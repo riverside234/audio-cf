@@ -9,16 +9,16 @@ from synthetic.infrastructure.schema_io import SchemaValidationError, strip_visi
 
 
 DEFAULT_PRIVATE_REASONING_INSTRUCTION = """Use the model's reasoning ability before writing the JSON object.
-Privately check the target, evidence-source labels, status-specific support or contradiction, unsupported details, and forbidden inferences.
+Privately check the target, evidence-source label, explicit same-audio support or contradiction, and forbidden inferences.
 Keep this reasoning private. Do not output chain-of-thought, analysis text, markdown, or <think> tags. Return only the final JSON object that matches the schema."""
 
-DEFAULT_VISIBLE_THINKING_INSTRUCTION = """Before returning the final JSON, check caption evidence, evidence-source labels, target condition, status-specific evidence, unsupported details, and forbidden inferences.
+DEFAULT_VISIBLE_THINKING_INSTRUCTION = """Before returning the final JSON, check caption evidence, the sole evidence-source label, explicit same-audio support or contradiction, and forbidden inferences.
 Return only the final JSON object that matches the schema."""
 
-DEFAULT_GEMMA4_VLLM_INSTRUCTION = """Before returning the final JSON, check caption evidence, evidence-source labels, target condition, status-specific evidence, unsupported details, and forbidden inferences.
+DEFAULT_GEMMA4_VLLM_INSTRUCTION = """Before returning the final JSON, check caption evidence, the sole evidence-source label, explicit same-audio support or contradiction, and forbidden inferences.
 Return only the final JSON object that matches the schema."""
 
-DEFAULT_QWEN3_VLLM_INSTRUCTION = """Use thinking mode to check caption evidence, evidence-source labels, target condition, status-specific evidence, unsupported details, and forbidden inferences.
+DEFAULT_QWEN3_VLLM_INSTRUCTION = """Use thinking mode to check caption evidence, the sole evidence-source label, explicit same-audio support or contradiction, and forbidden inferences.
 After thinking, return only the final JSON object that matches the schema."""
 
 
