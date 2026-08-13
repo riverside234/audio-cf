@@ -11,7 +11,7 @@ host: "0.0.0.0"
 port: 8000
 uvicorn-log-level: "info"
 
-# Read dtype and any quantization metadata from the local checkpoint.
+# The BF16 checkpoint config makes auto resolve to BF16 without hard-coding it.
 dtype: "auto"
 # Match the Qwen profile's room for schema-heavy prompts and complete JSON.
 max-model-len: 8192

@@ -51,10 +51,12 @@ export VLLM_CACHE_ROOT="/data/scratch/yxu209/.cache/vllm"
 mkdir -p "$VLLM_CACHE_ROOT"
 ```
 
-### Qwen3.6 FP8
+### Qwen3.6 BF16
 
 The Qwen profile uses the local `/data/not_backed_up/yxu209/models/qwen`
 checkpoint, the `qwen3` reasoning parser, and text-only loading.
+Both server profiles keep `dtype: auto`; their BF16 checkpoint configs make
+vLLM resolve this to BF16 while preserving model-metadata compatibility.
 Its 1,024-token thinking budget leaves the remainder of each 4,096-token
 completion budget for the required final JSON; the server context is 8,192.
 vLLM 0.25.x requires the V1 model runner for thinking-budget enforcement.

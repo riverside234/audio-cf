@@ -1,4 +1,4 @@
-# Python client profile for Qwen3.6-35B-A3B-FP8 served with
+# Python client profile for Qwen3.6-35B-A3B BF16 served with
 # configs/vllm_server_qwen36.yaml.
 
 client:
@@ -6,8 +6,7 @@ client:
   api_key: "EMPTY"
   model: "qwen3_5_moe"
   timeout_s: 120
-  # The sparse FP8 MoE checkpoint leaves substantial H100 memory for KV cache.
-  # Reduce to 32 if preemption appears.
+  # Reduce to 32 if the BF16 checkpoint causes preemption or KV-cache pressure.
   client_max_inflight_requests: 64
   verify_ssl: true
   # Qwen's recommended precise-task thinking sampler. Thinking controls are

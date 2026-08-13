@@ -1,4 +1,4 @@
-# Qwen3.6-35B-A3B-FP8 text-only server profile for:
+# Qwen3.6-35B-A3B BF16 text-only server profile for:
 #
 #   VLLM_USE_V2_MODEL_RUNNER=0 vllm serve \
 #     --config configs/vllm_server_qwen36.yaml
@@ -13,7 +13,7 @@ host: "0.0.0.0"
 port: 8000
 uvicorn-log-level: "info"
 
-# The checkpoint declares its FP8 format; auto lets vLLM read that metadata.
+# The BF16 checkpoint config makes auto resolve to BF16 without hard-coding it.
 dtype: "auto"
 # Leave room for the schema-heavy prompt, bounded thinking, and complete JSON.
 max-model-len: 8192
