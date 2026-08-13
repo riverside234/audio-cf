@@ -22,7 +22,7 @@ Return exactly one JSON object with these keys: verifier_status, validation_erro
 
 Checks:
 - Claim facts and status must follow explicit captions and the target.
-- Counterfactuals require an explicit contradiction, not caption absence.
+- CONTRADICTED counterfactuals require explicit contradictory evidence. UNSUPPORTED counterfactuals must use unsupported_detail without claiming acoustic absence.
 - The question must be complete, natural, and ask for both the evidence judgment and the audio source that determines it.
 - The answer must contain exactly two strings.
 - Map SUPPORTED to ["supported", "AUDIO_N"] and CONTRADICTED to ["contradicted", "AUDIO_N"], using the claim's sole evidence source.

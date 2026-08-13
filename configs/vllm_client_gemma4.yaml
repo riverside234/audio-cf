@@ -29,9 +29,9 @@ generation:
     reject_visible_reasoning: false
     instruction: >
       Before returning the final JSON, check caption evidence, evidence-source
-      labels, target condition, counterfactual contradiction basis, and
-      forbidden inferences. Return only the final JSON object that matches the
-      schema.
+      labels, target condition, status-specific evidence, unsupported details,
+      and forbidden inferences. Return only the final JSON object that matches
+      the schema.
   default:
     temperature: 0.2
     top_p: 0.95
@@ -63,10 +63,10 @@ agents:
     strategy: "cycle"
     seed: 42
   prompts:
-    claim_agent: "prompts/synthetic/claim_agent_v2.md"
+    claim_agent: "prompts/synthetic/claim_agent_v3.md"
     qa_agent: "prompts/synthetic/qa_agent_v4.md"
     verifier_agent: "prompts/synthetic/verifier_agent_v4.md"
-  prompt_version: "claim_agent_v2+qa_agent_v4+verifier_agent_v4+gemma4_thinking1024_v3"
+  prompt_version: "claim_agent_v3+qa_agent_v4+verifier_agent_v4+gemma4_thinking1024_v4"
 
 batching:
   runner_max_concurrency: 32

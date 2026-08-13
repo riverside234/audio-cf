@@ -40,6 +40,8 @@ are excluded from prompts.
 Final benchmark answers contain exactly two labels: an evidence judgment and its
 single determining source. Valid forms are `["supported", "AUDIO_1"]`,
 `["contradicted", "AUDIO_2"]`, and `["unsupported", "NONE"]`.
+The sampler includes one unsupported-detail target whose evidence and
+answer-source lists are empty.
 The default output directory is `data/synthetic/clotho_audio_units_v2`; do not
 append these rows to an older checkpoint with a different answer contract.
 

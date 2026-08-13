@@ -50,6 +50,21 @@ def build_target_conditions(audio_count: int) -> List[TargetCondition]:
             )
         )
 
+    conditions.append(
+        TargetCondition(
+            condition_name="counterfactual_unsupported_detail",
+            claim_type="counterfactual",
+            claim_status="UNSUPPORTED",
+            evidence_sources=[],
+            counterfactual_edit_type="unsupported_detail",
+            instruction=(
+                "Create one short plausible claim by adding one concrete detail that "
+                "is neither supported nor explicitly contradicted by any provided "
+                "caption. This is unsupported, not contradicted."
+            ),
+        )
+    )
+
     if audio_count == 1:
         conditions.append(
             TargetCondition(

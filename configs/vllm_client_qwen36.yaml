@@ -37,9 +37,9 @@ generation:
     reject_visible_reasoning: false
     instruction: >
       Use thinking mode to check caption evidence, evidence-source labels,
-      target condition, counterfactual contradiction basis, and forbidden
-      inferences. After thinking, return only the final JSON object that matches
-      the schema.
+      target condition, status-specific evidence, unsupported details, and
+      forbidden inferences. After thinking, return only the final JSON object
+      that matches the schema.
   default:
     temperature: 0.6
     top_p: 0.95
@@ -71,10 +71,10 @@ agents:
     strategy: "cycle"
     seed: 42
   prompts:
-    claim_agent: "prompts/synthetic/claim_agent_v2.md"
+    claim_agent: "prompts/synthetic/claim_agent_v3.md"
     qa_agent: "prompts/synthetic/qa_agent_v4.md"
     verifier_agent: "prompts/synthetic/verifier_agent_v4.md"
-  prompt_version: "claim_agent_v2+qa_agent_v4+verifier_agent_v4+qwen3.6_thinking_v3"
+  prompt_version: "claim_agent_v3+qa_agent_v4+verifier_agent_v4+qwen3.6_thinking_v4"
 
 batching:
   runner_max_concurrency: 64

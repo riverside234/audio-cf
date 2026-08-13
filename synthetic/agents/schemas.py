@@ -7,7 +7,7 @@ from typing import Any, Dict, Mapping
 
 
 EXAMPLE_SCHEMA_VERSION = "synthetic_example_v2"
-CLAIM_PROMPT_VERSION = "claim_agent_v2"
+CLAIM_PROMPT_VERSION = "claim_agent_v3"
 QA_PROMPT_VERSION = "qa_agent_v4"
 VERIFIER_PROMPT_VERSION = "verifier_agent_v4"
 VLLM_UNSUPPORTED_SCHEMA_KEYS = frozenset({"uniqueItems"})
@@ -27,6 +27,7 @@ COUNTERFACTUAL_EDIT_TYPES = [
     "false_conjunction",
     "false_exclusion",
     "explicit_fact_modification",
+    "unsupported_detail",
 ]
 
 EVIDENCE_SOURCE_SCHEMA = {

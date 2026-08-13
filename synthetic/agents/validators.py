@@ -77,7 +77,23 @@ def validate_claim_record(
             raise AgentValidationError("Faithful claims must use edit type 'none'.")
         return
 
+    status = str(claim_record.get("claim_status", "")).strip()
     contradiction_basis = str(claim_record.get("contradiction_basis", "")).strip()
+    if status == "UNSUPPORTED":
+        if evidence_sources:
+            raise AgentValidationError(
+                "UNSUPPORTED claims must have empty evidence_sources."
+            )
+        if supporting_phrases:
+            raise AgentValidationError(
+                "UNSUPPORTED claims must have empty supporting_caption_phrases."
+            )
+        if contradiction_basis.lower() not in {"", "none", "n/a"}:
+            raise AgentValidationError(
+                "UNSUPPORTED claims must not claim explicit contradictory evidence."
+            )
+        return
+
     if not contradiction_basis:
         raise AgentValidationError("Counterfactual claims need contradiction_basis.")
     if _uses_caption_absence_as_negative_evidence(contradiction_basis):
