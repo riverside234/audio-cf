@@ -28,8 +28,8 @@ output:
 
 vllm:
   # Gemma is the checked-in default. Use --vllm-config
-  # configs/vllm_client_qwen36.yaml for Qwen runs.
-  # config_path: "${cwd}/configs/vllm_client_qwen36.yaml"
+  # configs/vllm_client_qwen38.yaml for Qwen runs.
+  # config_path: "${cwd}/configs/vllm_client_qwen38.yaml"
   config_path: "${cwd}/configs/vllm_client_gemma4.yaml"
 
 run:

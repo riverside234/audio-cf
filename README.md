@@ -30,7 +30,7 @@ python -m unittest discover -s tests -v
 The checked-in configs use a high-throughput profile: 100,000 random two-audio
 units, Parquet-only data outputs, no generation audit table, and 256-unit durable
 checkpoints. Gemma is the checked-in default in `data_synthetic.yaml`; select
-Qwen3.6 with the explicit `--vllm-config` command below.
+Qwen3.8 with the explicit `--vllm-config` command below.
 
 Agent prompts are stage-specific: ClaimAgent receives at most three rotating
 captions from target-relevant sources, QAAgent receives the validated claim
@@ -55,14 +55,16 @@ export VLLM_CACHE_ROOT="/data/scratch/yxu209/.cache/vllm"
 mkdir -p "$VLLM_CACHE_ROOT"
 ```
 
-### Qwen3.6 BF16
+### Qwen3.8 BF16
 
 The Qwen profile uses the local `/data/not_backed_up/yxu209/models/qwen`
-checkpoint, the `qwen3` reasoning parser, and text-only loading.
+Qwen3.8-27B checkpoint, the `qwen3` reasoning parser, and text-only loading.
 Both server profiles keep `dtype: auto`; their BF16 checkpoint configs make
 vLLM resolve this to BF16 while preserving model-metadata compatibility.
-Its 1,024-token thinking budget leaves the remainder of each 4,096-token
-completion budget for the required final JSON; the server context is 8,192.
+The client sends Qwen3.8's native `reasoning_effort: medium` and official
+thinking-mode sampler. Its 1,024-token thinking budget leaves the remainder of
+each 4,096-token completion budget for the required final JSON; the server
+context is 8,192.
 vLLM 0.25.x requires the V1 model runner for thinking-budget enforcement.
 MTP is intentionally disabled because combining Qwen speculative decoding,
 reasoning parsing, and structured output can lose the `</think>` transition.
@@ -71,11 +73,11 @@ object misplaced there by this parser bug; reasoning prose is never accepted.
 
 ```bash
 VLLM_USE_V2_MODEL_RUNNER=0 CUDA_VISIBLE_DEVICES=0 \
-  vllm serve --config configs/vllm_server_qwen36.yaml
+  vllm serve --config configs/vllm_server_qwen38.yaml
 python data_synthetic.py \
   --config configs/data_synthetic.yaml \
-  --vllm-config configs/vllm_client_qwen36.yaml \
-  --output-dir data/synthetic/clotho_audio_units_qwen36_v0 \
+  --vllm-config configs/vllm_client_qwen38.yaml \
+  --output-dir data/synthetic/clotho_audio_units_qwen38_v0 \
   --overwrite
 ```
 

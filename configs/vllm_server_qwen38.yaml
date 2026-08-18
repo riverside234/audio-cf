@@ -1,12 +1,12 @@
-# Qwen3.6-35B-A3B BF16 text-only server profile for:
+# Qwen3.8-27B BF16 text-only server profile for:
 #
 #   VLLM_USE_V2_MODEL_RUNNER=0 vllm serve \
-#     --config configs/vllm_server_qwen36.yaml
+#     --config configs/vllm_server_qwen38.yaml
 #
-# Qwen recommends vLLM >= 0.19.0; requirements.txt currently uses >= 0.25.1.
+# Qwen3.8 requires Transformers >= 5.8.0 and vLLM >= 0.17.0.
 
 model: "/data/not_backed_up/yxu209/models/qwen"
-served-model-name: "qwen3_5_moe"
+served-model-name: "qwen3_8_27b"
 generation-config: "vllm"
 
 host: "0.0.0.0"
@@ -24,7 +24,7 @@ max-num-batched-tokens: 16384
 enable-prefix-caching: true
 enable-chunked-prefill: true
 
-# Qwen3.6 emits <think>...</think>; qwen3 separates it from message.content.
+# Qwen3.8 emits <think>...</think>; qwen3 separates it from message.content.
 reasoning-parser: "qwen3"
 
 # This pipeline sends caption text only. Skip vision loading/profiling to leave

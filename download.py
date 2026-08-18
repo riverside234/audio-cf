@@ -9,6 +9,6 @@ os.makedirs(local_dir, exist_ok=True)
 from huggingface_hub import snapshot_download
 
 snapshot_download(
-    repo_id="Qwen/Qwen3.6-27B",
+    repo_id="Qwen/Qwen3.8-27B",
     local_dir=local_dir,
 )

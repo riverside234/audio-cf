@@ -48,7 +48,7 @@ from synthetic.infrastructure.run_logger import RunLogger, utc_now
 
 
 DEFAULT_CONFIG_PATH = Path("configs/data_synthetic.yaml")
-DEFAULT_VLLM_CONFIG_PATH = Path("configs/vllm_client_qwen36.yaml")
+DEFAULT_VLLM_CONFIG_PATH = Path("configs/vllm_client_qwen38.yaml")
 
 
 @dataclass(frozen=True)
@@ -656,7 +656,7 @@ def build_request_extra_body(
     effort = str(reasoning.get("effort") or "medium").strip().lower()
     include_reasoning = bool(reasoning.get("include_reasoning", False))
 
-    allowed_efforts = {"none", "low", "medium", "high"}
+    allowed_efforts = {"none", "low", "medium", "high", "xhigh"}
     if effort not in allowed_efforts:
         raise ValueError(
             "generation.reasoning.effort must be one of "
@@ -671,9 +671,12 @@ def build_request_extra_body(
             bool(reasoning.get("preserve_thinking", False)),
         )
         extra_body["chat_template_kwargs"] = chat_template_kwargs
+        if enabled:
+            # Qwen3.8 supports low/medium/xhigh reasoning effort natively.
+            extra_body.setdefault("reasoning_effort", effort)
     else:
         # Gemma 4 and generic vLLM reasoning profiles use the OpenAI-compatible
-        # effort field. Qwen uses chat-template kwargs instead.
+        # effort field without Qwen's chat-template controls.
         extra_body.setdefault("reasoning_effort", effort if enabled else "none")
 
     # vLLM enforces this sampling budget from parser-derived reasoning

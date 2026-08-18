@@ -13,5 +13,5 @@ PyYAML>=6.0.1
 # vLLM is Linux/CUDA-oriented; this marker avoids installing it on native Windows.
 # vLLM pins compatible PyTorch and CUDA runtime wheels transitively. Do not add
 # individual `nvidia-*` packages here or mix CUDA 12 and CUDA 13 wheel families.
-transformers>=5.5.3,<6.0.0; platform_system == "Linux"
+transformers>=5.8.0,<6.0.0; platform_system == "Linux"
 vllm>=0.25.1,<0.26.0; platform_system == "Linux"

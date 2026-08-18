@@ -1,15 +1,15 @@
-# Python client profile for Qwen3.6-35B-A3B BF16 served with
-# configs/vllm_server_qwen36.yaml.
+# Python client profile for Qwen3.8-27B BF16 served with
+# configs/vllm_server_qwen38.yaml.
 
 client:
   base_url: "http://localhost:8000/v1"
   api_key: "EMPTY"
-  model: "qwen3_5_moe"
+  model: "qwen3_8_27b"
   timeout_s: 120
   # Reduce to 32 if the BF16 checkpoint causes preemption or KV-cache pressure.
   client_max_inflight_requests: 64
   verify_ssl: true
-  # Qwen's recommended precise-task thinking sampler. Thinking controls are
+  # Qwen3.8's recommended thinking-mode sampler. Thinking controls are
   # added by data_synthetic.py from generation.reasoning below.
   extra_body:
     top_k: 20
@@ -23,7 +23,8 @@ generation:
   reasoning:
     enabled: true
     mode: "qwen3_vllm"
-    # Qwen3.6 uses a boolean thinking switch rather than reasoning_effort.
+    # Qwen3.8 supports low, medium, and xhigh reasoning effort. Medium balances
+    # generation quality and throughput for this structured-data workload.
     effort: "medium"
     # Force Qwen to leave thinking mode early enough to emit the final JSON.
     # This is part of the 4096-token completion budget below.
@@ -41,19 +42,19 @@ generation:
       forbidden inferences. After thinking, return only the final JSON object
       that matches the schema.
   default:
-    temperature: 0.6
+    temperature: 1.0
     top_p: 0.95
     max_tokens: 4096
   claim_agent:
-    temperature: 0.6
+    temperature: 1.0
     top_p: 0.95
     max_tokens: 4096
   qa_agent:
-    temperature: 0.6
+    temperature: 1.0
     top_p: 0.95
     max_tokens: 4096
   verifier_agent:
-    temperature: 0.6
+    temperature: 1.0
     top_p: 0.95
     max_tokens: 4096
 
@@ -74,7 +75,7 @@ agents:
     claim_agent: "prompts/synthetic/claim_agent_v5.md"
     qa_agent: "prompts/synthetic/qa_agent_v5.md"
     verifier_agent: "prompts/synthetic/verifier_agent_v5.md"
-  prompt_version: "claim_agent_v5+qa_agent_v5+verifier_agent_v5+qwen3.6_thinking_v6"
+  prompt_version: "claim_agent_v5+qa_agent_v5+verifier_agent_v5+qwen3.8_thinking_v1"
 
 batching:
   runner_max_concurrency: 64

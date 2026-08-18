@@ -27,7 +27,7 @@ class ModelProfileTests(unittest.TestCase):
     def test_client_and_server_profiles_use_matching_names_and_parsers(self) -> None:
         cases = [
             ("gemma4", "gemma4_vllm", "gemma4"),
-            ("qwen36", "qwen3_vllm", "qwen3"),
+            ("qwen38", "qwen3_vllm", "qwen3"),
         ]
 
         for profile, reasoning_mode, parser in cases:
@@ -77,11 +77,11 @@ class ModelProfileTests(unittest.TestCase):
             },
         )
 
-    def test_qwen_uses_chat_template_thinking_fields(self) -> None:
-        config = load_yaml(ROOT / "configs" / "vllm_client_qwen36.yaml")
+    def test_qwen38_uses_native_reasoning_and_chat_template_fields(self) -> None:
+        config = load_yaml(ROOT / "configs" / "vllm_client_qwen38.yaml")
         extra_body = build_request_extra_body(config, config["client"])
 
-        self.assertNotIn("reasoning_effort", extra_body)
+        self.assertEqual(extra_body["reasoning_effort"], "medium")
         self.assertTrue(extra_body["include_reasoning"])
         self.assertEqual(extra_body["thinking_token_budget"], 1024)
         self.assertEqual(
@@ -90,7 +90,7 @@ class ModelProfileTests(unittest.TestCase):
         )
         self.assertEqual(extra_body["top_k"], 20)
 
-        server = load_yaml(ROOT / "configs" / "vllm_server_qwen36.yaml")
+        server = load_yaml(ROOT / "configs" / "vllm_server_qwen38.yaml")
         self.assertTrue(server["language-model-only"])
         self.assertNotIn("speculative-config", server)
 
