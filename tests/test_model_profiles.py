@@ -56,7 +56,7 @@ class ModelProfileTests(unittest.TestCase):
                 ):
                     self.assertEqual(
                         client["generation"][agent_name]["max_tokens"],
-                        4096,
+                        3072,
                     )
 
     def test_gemma_uses_reasoning_effort_request_fields(self) -> None:
@@ -66,6 +66,7 @@ class ModelProfileTests(unittest.TestCase):
         self.assertEqual(extra_body["reasoning_effort"], "low")
         self.assertFalse(extra_body["include_reasoning"])
         self.assertEqual(extra_body["thinking_token_budget"], 1024)
+        self.assertEqual(extra_body["top_k"], 64)
         self.assertNotIn("chat_template_kwargs", extra_body)
 
         server = load_yaml(ROOT / "configs" / "vllm_server_gemma4.yaml")
@@ -81,7 +82,7 @@ class ModelProfileTests(unittest.TestCase):
         config = load_yaml(ROOT / "configs" / "vllm_client_qwen38.yaml")
         extra_body = build_request_extra_body(config, config["client"])
 
-        self.assertEqual(extra_body["reasoning_effort"], "medium")
+        self.assertEqual(extra_body["reasoning_effort"], "low")
         self.assertTrue(extra_body["include_reasoning"])
         self.assertEqual(extra_body["thinking_token_budget"], 1024)
         self.assertEqual(
@@ -92,7 +93,27 @@ class ModelProfileTests(unittest.TestCase):
 
         server = load_yaml(ROOT / "configs" / "vllm_server_qwen38.yaml")
         self.assertTrue(server["language-model-only"])
-        self.assertNotIn("speculative-config", server)
+        self.assertEqual(
+            server["speculative-config"],
+            {"method": "mtp", "num_speculative_tokens": 3},
+        )
+
+    def test_model_profiles_use_quality_sampling_defaults(self) -> None:
+        for profile in ("gemma4", "qwen38"):
+            with self.subTest(profile=profile):
+                config = load_yaml(
+                    ROOT / "configs" / f"vllm_client_{profile}.yaml"
+                )
+                for agent_name in (
+                    "default",
+                    "claim_agent",
+                    "qa_agent",
+                    "verifier_agent",
+                ):
+                    sampling = config["generation"][agent_name]
+                    self.assertEqual(sampling["temperature"], 1.0)
+                    self.assertEqual(sampling["top_p"], 0.95)
+                    self.assertEqual(sampling["max_tokens"], 3072)
 
     def test_qwen_prefilled_opening_think_token_is_sanitized(self) -> None:
         clean, removed = strip_visible_reasoning(

@@ -31,9 +31,11 @@ reasoning-parser: "qwen3"
 # more memory for KV cache and concurrent requests.
 language-model-only: true
 
-# Keep MTP disabled for schema-constrained reasoning requests. Current vLLM can
-# miss Qwen's </think> transition when MTP and structured output are combined,
-# leaving the final JSON in message.reasoning instead of message.content.
+# Qwen3.8 ships a native multi-step MTP head. vLLM verifies draft tokens
+# against the target model, so speculative decoding preserves its distribution.
+speculative-config:
+  method: "mtp"
+  num_speculative_tokens: 3
 
 tensor-parallel-size: 1
 download-dir: "/data/not_backed_up/yxu209/huggingface/cache"

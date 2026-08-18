@@ -61,13 +61,13 @@ The Qwen profile uses the local `/data/not_backed_up/yxu209/models/qwen`
 Qwen3.8-27B checkpoint, the `qwen3` reasoning parser, and text-only loading.
 Both server profiles keep `dtype: auto`; their BF16 checkpoint configs make
 vLLM resolve this to BF16 while preserving model-metadata compatibility.
-The client sends Qwen3.8's native `reasoning_effort: medium` and official
+The client sends Qwen3.8's native `reasoning_effort: low` and official
 thinking-mode sampler. Its 1,024-token thinking budget leaves the remainder of
-each 4,096-token completion budget for the required final JSON; the server
+each 3,072-token completion budget for the required final JSON; the server
 context is 8,192.
 vLLM 0.25.x requires the V1 model runner for thinking-budget enforcement.
-MTP is intentionally disabled because combining Qwen speculative decoding,
-reasoning parsing, and structured output can lose the `</think>` transition.
+The server enables Qwen3.8's native MTP head with three speculative tokens;
+vLLM verifies drafts against the target model, preserving output quality.
 The Qwen client requests the reasoning field solely to recover a complete JSON
 object misplaced there by this parser bug; reasoning prose is never accepted.
 
@@ -84,7 +84,7 @@ python data_synthetic.py \
 ### Gemma 4
 
 Stop the Qwen server before switching because both profiles use port 8000. The
-Gemma server also uses an 8,192-token context and 4,096-token agent completion
+Gemma server also uses an 8,192-token context and 3,072-token agent completion
 budgets. For Gemma, `reasoning_effort: low` enables thinking but does not lower
 its token use relative to `medium` or `high`; `thinking_token_budget: 1024` is
 the actual private-reasoning cap. Set the effort to `none` only to disable

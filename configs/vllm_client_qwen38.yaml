@@ -23,11 +23,10 @@ generation:
   reasoning:
     enabled: true
     mode: "qwen3_vllm"
-    # Qwen3.8 supports low, medium, and xhigh reasoning effort. Medium balances
-    # generation quality and throughput for this structured-data workload.
-    effort: "medium"
+    # Low is sufficient for the short, schema-constrained grounding decisions.
+    effort: "low"
     # Force Qwen to leave thinking mode early enough to emit the final JSON.
-    # This is part of the 4096-token completion budget below.
+    # This is part of the 3072-token completion budget below.
     thinking_token_budget: 1024
     # Required as a compatibility fallback: some vLLM Qwen parser paths place
     # schema-constrained final JSON in message.reasoning with null content.
@@ -44,19 +43,19 @@ generation:
   default:
     temperature: 1.0
     top_p: 0.95
-    max_tokens: 4096
+    max_tokens: 3072
   claim_agent:
     temperature: 1.0
     top_p: 0.95
-    max_tokens: 4096
+    max_tokens: 3072
   qa_agent:
     temperature: 1.0
     top_p: 0.95
-    max_tokens: 4096
+    max_tokens: 3072
   verifier_agent:
     temperature: 1.0
     top_p: 0.95
-    max_tokens: 4096
+    max_tokens: 3072
 
 retry:
   max_attempts: 3
@@ -75,7 +74,7 @@ agents:
     claim_agent: "prompts/synthetic/claim_agent_v5.md"
     qa_agent: "prompts/synthetic/qa_agent_v5.md"
     verifier_agent: "prompts/synthetic/verifier_agent_v5.md"
-  prompt_version: "claim_agent_v5+qa_agent_v5+verifier_agent_v5+qwen3.8_thinking_v1"
+  prompt_version: "claim_agent_v5+qa_agent_v5+verifier_agent_v5+qwen3.8_thinking_v2"
 
 batching:
   runner_max_concurrency: 64
