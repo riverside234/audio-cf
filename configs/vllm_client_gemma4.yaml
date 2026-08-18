@@ -10,7 +10,7 @@ client:
   # Lower this and runner concurrency to 16 if vLLM reports preemption.
   client_max_inflight_requests: 32
   verify_ssl: true
-  # Gemma 4's recommended thinking-mode sampler also includes top_k=64.
+  # Retain the model-family top-k while using paper-calibrated temperatures.
   extra_body:
     top_k: 64
 
@@ -24,7 +24,7 @@ generation:
     # For Gemma 4, low/medium/high all enable thinking; they are not numeric caps.
     effort: "low"
     # vLLM forces Gemma's thought channel to end at this sampling budget.
-    # This is part of the 3072-token completion budget below.
+    # This is part of the 2048-token completion budget below.
     thinking_token_budget: 1024
     include_reasoning: false
     strip_visible_reasoning: true
@@ -35,21 +35,24 @@ generation:
       and forbidden inferences. Return only the final JSON object that matches
       the schema.
   default:
-    temperature: 1.0
+    temperature: 0.5
     top_p: 0.95
-    max_tokens: 3072
+    max_tokens: 2048
   claim_agent:
-    temperature: 1.0
+    # Moderate sampling preserves useful claim diversity.
+    temperature: 0.7
     top_p: 0.95
-    max_tokens: 3072
+    max_tokens: 2048
   qa_agent:
-    temperature: 1.0
+    # Grounded task generation favors Bonito's lower-temperature regime.
+    temperature: 0.5
     top_p: 0.95
-    max_tokens: 3072
+    max_tokens: 2048
   verifier_agent:
-    temperature: 1.0
-    top_p: 0.95
-    max_tokens: 3072
+    # Verification is a fixed judgment, so use greedy decoding.
+    temperature: 0.0
+    top_p: 1.0
+    max_tokens: 2048
 
 retry:
   max_attempts: 3
@@ -68,7 +71,7 @@ agents:
     claim_agent: "prompts/synthetic/claim_agent_v5.md"
     qa_agent: "prompts/synthetic/qa_agent_v5.md"
     verifier_agent: "prompts/synthetic/verifier_agent_v5.md"
-  prompt_version: "claim_agent_v5+qa_agent_v5+verifier_agent_v5+gemma4_thinking1024_v7"
+  prompt_version: "claim_agent_v5+qa_agent_v5+verifier_agent_v5+gemma4_thinking1024_v8"
 
 batching:
   runner_max_concurrency: 32

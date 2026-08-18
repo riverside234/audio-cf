@@ -56,7 +56,7 @@ class ModelProfileTests(unittest.TestCase):
                 ):
                     self.assertEqual(
                         client["generation"][agent_name]["max_tokens"],
-                        3072,
+                        2048,
                     )
 
     def test_gemma_uses_reasoning_effort_request_fields(self) -> None:
@@ -98,22 +98,23 @@ class ModelProfileTests(unittest.TestCase):
             {"method": "mtp", "num_speculative_tokens": 3},
         )
 
-    def test_model_profiles_use_quality_sampling_defaults(self) -> None:
+    def test_model_profiles_use_stage_specific_synthetic_sampling(self) -> None:
+        expected = {
+            "default": (0.5, 0.95),
+            "claim_agent": (0.7, 0.95),
+            "qa_agent": (0.5, 0.95),
+            "verifier_agent": (0.0, 1.0),
+        }
         for profile in ("gemma4", "qwen38"):
             with self.subTest(profile=profile):
                 config = load_yaml(
                     ROOT / "configs" / f"vllm_client_{profile}.yaml"
                 )
-                for agent_name in (
-                    "default",
-                    "claim_agent",
-                    "qa_agent",
-                    "verifier_agent",
-                ):
+                for agent_name, (temperature, top_p) in expected.items():
                     sampling = config["generation"][agent_name]
-                    self.assertEqual(sampling["temperature"], 1.0)
-                    self.assertEqual(sampling["top_p"], 0.95)
-                    self.assertEqual(sampling["max_tokens"], 3072)
+                    self.assertEqual(sampling["temperature"], temperature)
+                    self.assertEqual(sampling["top_p"], top_p)
+                    self.assertEqual(sampling["max_tokens"], 2048)
 
     def test_qwen_prefilled_opening_think_token_is_sanitized(self) -> None:
         clean, removed = strip_visible_reasoning(
