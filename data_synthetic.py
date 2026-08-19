@@ -29,6 +29,7 @@ from synthetic.agents import (
     VerifierAgent,
     build_runner,
 )
+from synthetic.agents.candidate_selection import select_distinct_verified_states
 from synthetic.infrastructure.dataset_io import (
     batched,
     load_rows,
@@ -161,11 +162,21 @@ async def run_generation(
     continue_on_error = bool(get_nested(config, ["run", "continue_on_error"], True))
     overwrite = bool(get_nested(config, ["output", "overwrite"], False))
     run_name = optional_str(get_nested(config, ["run", "run_name"], None))
+    examples_per_unit = int(
+        get_nested(config, ["generation", "examples_per_unit"], 1)
+    )
+    similarity_threshold = float(
+        get_nested(config, ["generation", "similarity_threshold"], 0.90)
+    )
 
     if start_index < 0:
         raise ValueError("input.start_index must be >= 0.")
     if max_units is not None and max_units < 1:
         raise ValueError("input.max_units must be null or >= 1.")
+    if examples_per_unit < 1:
+        raise ValueError("generation.examples_per_unit must be >= 1.")
+    if not 0.0 < similarity_threshold <= 1.0:
+        raise ValueError("generation.similarity_threshold must be > 0 and <= 1.")
 
     output_paths = build_output_paths(config)
     output_paths.output_dir.mkdir(parents=True, exist_ok=True)
@@ -180,6 +191,8 @@ async def run_generation(
             "vllm_config_path": str(vllm_config_path),
             "input_path": str(input_path),
             "dry_run": dry_run,
+            "examples_per_unit": examples_per_unit,
+            "similarity_threshold": similarity_threshold,
         },
     )
 
@@ -212,6 +225,7 @@ async def run_generation(
             max_units=max_units,
             status="dry_run",
             completed_batches=0,
+            near_duplicates_removed=0,
         )
         write_json(output_paths.stats, stats)
         write_jsonl(output_paths.errors_jsonl, [])
@@ -231,6 +245,7 @@ async def run_generation(
     output_writer = build_incremental_output_writer(output_paths, config)
     examples_written = 0
     errors_written = 0
+    near_duplicates_removed = 0
     completed_batches = 0
 
     async with VLLMClient(llm_client_config) as llm_client:
@@ -244,14 +259,20 @@ async def run_generation(
         for batch in batched(selected_rows, batch_size):
             logger.log_event(
                 "batch_started",
-                {"start_index": absolute_index, "batch_size": len(batch)},
+                {
+                    "start_index": absolute_index,
+                    "batch_size": len(batch),
+                    "candidate_count": len(batch) * examples_per_unit,
+                },
             )
-            states, batch_errors = await run_batch(
+            states, batch_errors, batch_duplicates_removed = await run_batch(
                 runner=runner,
                 rows=batch,
                 start_index=absolute_index,
                 fail_fast=fail_fast,
                 continue_on_error=continue_on_error,
+                examples_per_unit=examples_per_unit,
+                similarity_threshold=similarity_threshold,
             )
             batch_examples: List[Dict[str, Any]] = []
             batch_audit_rows: List[Dict[str, Any]] = []
@@ -270,6 +291,7 @@ async def run_generation(
             )
             examples_written += len(batch_examples)
             errors_written += len(batch_errors)
+            near_duplicates_removed += batch_duplicates_removed
             completed_batches += 1
             progress_stats = build_stats(
                 config=config,
@@ -283,6 +305,7 @@ async def run_generation(
                 max_units=max_units,
                 status="in_progress",
                 completed_batches=completed_batches,
+                near_duplicates_removed=near_duplicates_removed,
             )
             write_json(output_paths.stats, progress_stats)
             logger.write_stats(progress_stats)
@@ -293,6 +316,7 @@ async def run_generation(
                     "batch_size": len(batch),
                     "examples_total": examples_written,
                     "errors_total": errors_written,
+                    "near_duplicates_removed_total": near_duplicates_removed,
                     "checkpoint_dir": str(output_paths.checkpoint_dir),
                 },
             )
@@ -311,6 +335,7 @@ async def run_generation(
         max_units=max_units,
         status="completed",
         completed_batches=completed_batches,
+        near_duplicates_removed=near_duplicates_removed,
     )
     write_json(output_paths.stats, stats)
     logger.write_stats(stats)
@@ -389,34 +414,64 @@ async def run_batch(
     start_index: int,
     fail_fast: bool,
     continue_on_error: bool,
-) -> Tuple[List[Any], List[Dict[str, Any]]]:
+    examples_per_unit: int = 1,
+    similarity_threshold: float = 0.90,
+) -> Tuple[List[Any], List[Dict[str, Any]], int]:
+    if examples_per_unit < 1:
+        raise ValueError("examples_per_unit must be >= 1.")
+    if not 0.0 < similarity_threshold <= 1.0:
+        raise ValueError("similarity_threshold must be > 0 and <= 1.")
     semaphore = asyncio.Semaphore(int(runner.max_concurrency))
 
-    async def run_one(offset: int, row: Mapping[str, Any]) -> Any:
+    async def run_one(
+        offset: int,
+        candidate_index: int,
+        row: Mapping[str, Any],
+    ) -> Any:
+        unit_index = start_index + offset
+        condition_index = unit_index * examples_per_unit + candidate_index
         async with semaphore:
-            return await runner.run_unit(row, unit_index=start_index + offset)
+            return await runner.run_unit(
+                row,
+                unit_index=unit_index,
+                candidate_index=candidate_index,
+                condition_index=condition_index,
+            )
 
-    tasks = [run_one(offset, row) for offset, row in enumerate(rows)]
+    candidate_specs = [
+        (offset, candidate_index, row)
+        for offset, row in enumerate(rows)
+        for candidate_index in range(examples_per_unit)
+    ]
+    tasks = [run_one(*spec) for spec in candidate_specs]
     if fail_fast or not continue_on_error:
-        states = await asyncio.gather(*tasks)
-        return list(states), []
+        completed_states = list(await asyncio.gather(*tasks))
+        states, duplicates_removed = select_distinct_verified_states(
+            completed_states,
+            similarity_threshold,
+        )
+        return states, [], duplicates_removed
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
-    states: List[Any] = []
+    completed_states: List[Any] = []
     errors: List[Dict[str, Any]] = []
-    for offset, result in enumerate(results):
-        unit = rows[offset]
+    for (offset, candidate_index, unit), result in zip(candidate_specs, results):
         if isinstance(result, Exception):
             errors.append(
                 build_generation_error(
                     result,
                     unit_index=start_index + offset,
                     unit_id=str(unit.get("unit_id", "")),
+                    candidate_index=candidate_index,
                 )
             )
         else:
-            states.append(result)
-    return states, errors
+            completed_states.append(result)
+    states, duplicates_removed = select_distinct_verified_states(
+        completed_states,
+        similarity_threshold,
+    )
+    return states, errors, duplicates_removed
 
 
 def build_generation_error(
@@ -424,6 +479,7 @@ def build_generation_error(
     *,
     unit_index: int,
     unit_id: str,
+    candidate_index: Optional[int] = None,
 ) -> Dict[str, Any]:
     row: Dict[str, Any] = {
         "timestamp": utc_now(),
@@ -433,6 +489,8 @@ def build_generation_error(
         "error_type": type(error).__name__,
         "message": str(error),
     }
+    if candidate_index is not None:
+        row["candidate_index"] = candidate_index
     if isinstance(error, VLLMHTTPError):
         row.update(
             {
@@ -462,6 +520,7 @@ def build_audit_row(state: Any) -> Dict[str, Any]:
         "example_id": state.example_id or "",
         "unit_id": state.unit_record.get("unit_id", ""),
         "audio_count": state.unit_record.get("audio_count", 0),
+        "candidate_index": state.candidate_index,
         "target_condition": state.target_condition,
         "claim_record": state.claim_record,
         "qa_record": state.qa_record,
@@ -512,7 +571,11 @@ def build_stats(
     max_units: Optional[int],
     status: str,
     completed_batches: int,
+    near_duplicates_removed: int,
 ) -> Dict[str, Any]:
+    examples_per_unit = int(
+        get_nested(config, ["generation", "examples_per_unit"], 1)
+    )
     return {
         "timestamp": utc_now(),
         "status": status,
@@ -523,6 +586,15 @@ def build_stats(
         "max_units": max_units,
         "examples_written": examples_written,
         "errors_written": errors_written,
+        "examples_per_unit": examples_per_unit,
+        "candidate_generations_planned": selected_units * examples_per_unit,
+        "candidate_generations_completed": (
+            examples_written + errors_written + near_duplicates_removed
+        ),
+        "near_duplicates_removed": near_duplicates_removed,
+        "similarity_threshold": float(
+            get_nested(config, ["generation", "similarity_threshold"], 0.90)
+        ),
         "completed_batches": completed_batches,
         "checkpoint_dir": str(build_output_paths(config).checkpoint_dir),
         "generation_model": get_nested(vllm_config, ["client", "model"], ""),

@@ -39,14 +39,14 @@ generation:
     top_p: 0.95
     max_tokens: 3072
   claim_agent:
-    # Keep claim diversity while reducing inconsistent contradiction edits.
-    temperature: 0.5
-    top_p: 0.90
+    # Moderate sampling preserves useful diversity across candidates.
+    temperature: 0.7
+    top_p: 0.95
     max_tokens: 3072
   qa_agent:
-    # QA formatting benefits from a more conservative sampling regime.
-    temperature: 0.3
-    top_p: 0.90
+    # Keep QA grounded while allowing varied phrasing across candidates.
+    temperature: 0.4
+    top_p: 0.95
     max_tokens: 3072
   verifier_agent:
     # Verification is a fixed judgment, so use greedy decoding.

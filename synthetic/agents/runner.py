@@ -42,10 +42,14 @@ class SyntheticGenerationRunner:
         self,
         unit_record: Mapping[str, Any],
         unit_index: int = 0,
+        candidate_index: int = 0,
+        condition_index: Optional[int] = None,
     ) -> SyntheticGenerationState:
         state = SyntheticGenerationState(
             unit_record=dict(unit_record),
             unit_index=unit_index,
+            candidate_index=candidate_index,
+            condition_index=condition_index,
         )
         validate_audio_unit_record(state.unit_record)
         state.target_condition = self._choose_condition(state).to_dict()
@@ -58,7 +62,11 @@ class SyntheticGenerationRunner:
 
     def _choose_condition(self, state: SyntheticGenerationState) -> TargetCondition:
         assert self.condition_sampler is not None
-        return self.condition_sampler.choose(state.unit_record, state.unit_index)
+        return self.condition_sampler.choose(
+            state.unit_record,
+            state.unit_index,
+            condition_index=state.condition_index,
+        )
 
     async def _run_claim_with_retries(self, state: SyntheticGenerationState) -> None:
         assert state.target_condition is not None

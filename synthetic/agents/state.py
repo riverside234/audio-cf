@@ -19,6 +19,8 @@ class SyntheticGenerationState:
 
     unit_record: AudioUnitRecord
     unit_index: int = 0
+    candidate_index: int = 0
+    condition_index: Optional[int] = None
     target_condition: Optional[JsonObject] = None
     claim_record: Optional[JsonObject] = None
     qa_record: Optional[JsonObject] = None

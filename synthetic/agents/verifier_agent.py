@@ -66,7 +66,7 @@ class VerifierAgent:
                 "audio_context": format_audio_context(
                     state.unit_record,
                     source_labels=source_labels,
-                    caption_offset=state.unit_index,
+                    caption_offset=state.unit_index + state.candidate_index,
                 ),
                 "target_condition_json": compact_json(
                     prompt_target_condition(state.target_condition)

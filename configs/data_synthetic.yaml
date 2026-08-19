@@ -6,6 +6,13 @@ input:
   start_index: 0
   max_units: null
 
+generation:
+  # Attempt this many independently verified claim/QA candidates per audio unit.
+  # Verified candidates with the same label/source and near-duplicate text are
+  # collapsed to one example.
+  examples_per_unit: 2
+  similarity_threshold: 0.90
+
 output:
   # v4 removes the redundant claim-type and edit-type columns.
   output_dir: "${cwd}/data/synthetic/clotho_audio_units_v4"

@@ -112,6 +112,7 @@ class SyntheticGenerationRunnerTests(unittest.IsolatedAsyncioTestCase):
         audit_row = build_audit_row(state)
         self.assertEqual(audit_row["example_id"], state.example_id)
         self.assertEqual(audit_row["unit_id"], "unit-1")
+        self.assertEqual(audit_row["candidate_index"], 0)
         self.assertEqual(state.visible_reasoning_stripped, ["claim_agent"])
         self.assertNotIn("private check", state.raw_claim_text or "")
         self.assertEqual(state.verifier_record, valid_verifier())

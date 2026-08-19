@@ -85,6 +85,8 @@ class TargetConditionSampler:
             raise ValueError(f"No target conditions available for audio_count={audio_count}.")
 
         if condition_index is not None:
+            if self.strategy == "random":
+                return random.Random(self.seed + condition_index).choice(conditions)
             return conditions[condition_index % len(conditions)]
         if self.strategy == "random":
             return self._rng.choice(conditions)
