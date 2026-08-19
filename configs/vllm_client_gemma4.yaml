@@ -45,7 +45,7 @@ generation:
     max_tokens: 3072
   qa_agent:
     # Keep QA grounded while allowing varied phrasing across candidates.
-    temperature: 0.4
+    temperature: 0.5
     top_p: 0.95
     max_tokens: 3072
   verifier_agent:
