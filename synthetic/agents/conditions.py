@@ -60,7 +60,8 @@ def build_target_conditions(audio_count: int) -> List[TargetCondition]:
                 instruction=(
                     f"Create one short claim about one coherent event in {label} that "
                     "changes one or more related caption-established propositions into "
-                    "objectively incompatible alternatives. Avoid subjective contrasts. "
+                    "clearly incompatible alternatives. Explicitly captioned subjective "
+                    "or relative attributes are allowed. "
                     f"The positive caption evidence from {label} must prove the "
                     "contradiction for every change; do not rely on omission or another "
                     "audio source."

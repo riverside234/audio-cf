@@ -200,7 +200,7 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
         runner = SyntheticGenerationRunner(
             claim_agent=ClaimAgent(
                 llm_client=fake_client,  # type: ignore[arg-type]
-                prompt_path=ROOT / "prompts" / "synthetic" / "claim_agent_v6.md",
+                prompt_path=ROOT / "prompts" / "synthetic" / "claim_agent_v7.md",
                 reasoning_policy=policy,
             ),
             qa_agent=QAAgent(
@@ -238,21 +238,23 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('Never use "unsupported"', prompt)
 
         verifier_prompt = (
-            ROOT / "prompts" / "synthetic" / "verifier_agent_v6.md"
+            ROOT / "prompts" / "synthetic" / "verifier_agent_v7.md"
         ).read_text(encoding="utf-8")
         self.assertIn("Reject every cross-audio source swap", verifier_prompt)
         self.assertIn("Caption omission", verifier_prompt)
 
-    def test_claim_prompt_allows_related_propositions_and_objective_contradictions(self) -> None:
+    def test_claim_prompt_allows_related_and_explicit_subjective_contrasts(self) -> None:
         prompt = (
-            ROOT / "prompts" / "synthetic" / "claim_agent_v6.md"
+            ROOT / "prompts" / "synthetic" / "claim_agent_v7.md"
         ).read_text(encoding="utf-8")
 
         self.assertIn("one coherent event", prompt)
         self.assertIn("several related propositions", prompt)
         self.assertIn("one caption or several captions", prompt)
-        self.assertIn("objectively incompatible alternatives", prompt)
+        self.assertIn("clearly incompatible alternatives", prompt)
         self.assertIn("gentle versus aggressive", prompt)
+        self.assertIn("loud versus quiet", prompt)
+        self.assertIn("caption explicitly states", prompt)
         self.assertIn("prove every changed proposition incompatible", prompt)
         self.assertIn("positive caption evidence from the same audio", prompt)
         self.assertIn("never move a fact between", prompt)

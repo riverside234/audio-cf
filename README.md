@@ -43,8 +43,9 @@ single determining source. Valid forms are `["supported", "AUDIO_1"]` and
 support; contradicted claims require positive, mutually incompatible caption
 evidence from the same audio. Evidence may use one or several captions from that
 audio to establish one or several related propositions about one coherent event.
-Contradictions use objectively checkable changes rather than subjective manner,
-intensity, emotion, or quality contrasts. Other cases and source swaps are excluded.
+Contradictions require explicit, clearly incompatible same-audio evidence.
+Caption-stated relative or subjective contrasts such as loud/quiet or
+gentle/aggressive are allowed; omission-based cases and source swaps are excluded.
 The default output directory is `data/synthetic/clotho_audio_units_v3`; do not
 append these rows to an older checkpoint with a different answer contract.
 
