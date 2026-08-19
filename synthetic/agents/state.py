@@ -79,10 +79,8 @@ def prompt_target_condition(target_condition: Mapping[str, Any]) -> JsonObject:
     """Drop the redundant condition name from prompt-facing target data."""
 
     keys = (
-        "claim_type",
         "claim_status",
         "evidence_sources",
-        "counterfactual_edit_type",
         "instruction",
     )
     return {key: target_condition[key] for key in keys if key in target_condition}

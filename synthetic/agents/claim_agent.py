@@ -27,7 +27,7 @@ from .state import (
 
 
 class ClaimAgent:
-    """Generate one faithful or counterfactual claim from caption evidence."""
+    """Generate one supported or contradicted claim from caption evidence."""
 
     def __init__(
         self,

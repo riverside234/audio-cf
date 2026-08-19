@@ -89,6 +89,8 @@ class SyntheticGenerationRunnerTests(unittest.IsolatedAsyncioTestCase):
             "grounding_standard",
             "audio_captions",
             "generation_model",
+            "claim_type",
+            "counterfactual_edit_type",
         }
         self.assertTrue(provenance_fields.isdisjoint(state.final_example))
         self.assertTrue((state.example_id or "").startswith("synthetic_"))
@@ -103,6 +105,14 @@ class SyntheticGenerationRunnerTests(unittest.IsolatedAsyncioTestCase):
         qa_wire_schema = fake_client.calls[1]["response_format"]["json_schema"][
             "schema"
         ]
+        claim_wire_schema = fake_client.calls[0]["response_format"]["json_schema"][
+            "schema"
+        ]
+        self.assertNotIn("claim_type", claim_wire_schema["properties"])
+        self.assertNotIn(
+            "counterfactual_edit_type",
+            claim_wire_schema["properties"],
+        )
         self.assertEqual(
             set(qa_wire_schema["properties"]),
             {"question", "claim_evaluation_explanation"},
@@ -214,7 +224,7 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
         runner = SyntheticGenerationRunner(
             claim_agent=ClaimAgent(
                 llm_client=fake_client,  # type: ignore[arg-type]
-                prompt_path=ROOT / "prompts" / "synthetic" / "claim_agent_v9.md",
+                prompt_path=ROOT / "prompts" / "synthetic" / "claim_agent_v10.md",
                 reasoning_policy=policy,
             ),
             qa_agent=QAAgent(
@@ -262,11 +272,11 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
 
     def test_claim_prompt_allows_related_and_explicit_subjective_contrasts(self) -> None:
         prompt = (
-            ROOT / "prompts" / "synthetic" / "claim_agent_v9.md"
+            ROOT / "prompts" / "synthetic" / "claim_agent_v10.md"
         ).read_text(encoding="utf-8")
 
         previous_prompt = (
-            ROOT / "prompts" / "synthetic" / "claim_agent_v7.md"
+            ROOT / "prompts" / "synthetic" / "claim_agent_v9.md"
         ).read_text(encoding="utf-8")
         self.assertIn("one coherent event", prompt)
         self.assertIn("combine related propositions", prompt)
@@ -277,6 +287,9 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Caption omission", prompt)
         self.assertIn("another audio", prompt)
         self.assertIn("may paraphrase", prompt)
+        self.assertNotIn("counterfactual", prompt.lower())
+        self.assertNotIn("claim_type", prompt)
+        self.assertNotIn("counterfactual_edit_type", prompt)
         self.assertLess(len(prompt), len(previous_prompt))
 
     def test_source_references_and_feedback_are_bounded(self) -> None:
@@ -335,6 +348,17 @@ class VLLMResponseSchemaTests(unittest.TestCase):
         with self.assertRaises(SchemaValidationError):
             validate_json(claim, CLAIM_OUTPUT_SCHEMA)
 
+    def test_claim_schema_rejects_removed_taxonomy_fields(self) -> None:
+        for field, value in (
+            ("claim_type", "faithful"),
+            ("counterfactual_edit_type", "none"),
+        ):
+            with self.subTest(field=field):
+                claim = valid_claim()
+                claim[field] = value
+                with self.assertRaises(SchemaValidationError):
+                    validate_json(claim, CLAIM_OUTPUT_SCHEMA)
+
     def test_qa_schema_requires_a_list_answer(self) -> None:
         qa = valid_qa()
         validate_json(qa, QA_OUTPUT_SCHEMA)
@@ -382,7 +406,6 @@ class VLLMResponseSchemaTests(unittest.TestCase):
 
     def test_contradicted_answer_uses_its_determining_source(self) -> None:
         claim = valid_claim()
-        claim["claim_type"] = "counterfactual"
         claim["claim_status"] = "CONTRADICTED"
         claim["evidence_sources"] = ["AUDIO_2"]
         qa = valid_qa()
@@ -478,12 +501,24 @@ class VLLMResponseSchemaTests(unittest.TestCase):
                 self.assertTrue(
                     all(len(condition.evidence_sources) == 1 for condition in conditions)
                 )
-                self.assertNotIn(
-                    "source_swap",
-                    {condition.counterfactual_edit_type for condition in conditions},
+                self.assertTrue(
+                    all(
+                        "source_swap" not in condition.condition_name
+                        for condition in conditions
+                    )
                 )
                 self.assertTrue(
-                    all("source_swap" not in condition.condition_name for condition in conditions)
+                    all(
+                        "counterfactual" not in condition.condition_name
+                        for condition in conditions
+                    )
+                )
+                self.assertTrue(
+                    all(
+                        "claim_type" not in condition.to_dict()
+                        and "counterfactual_edit_type" not in condition.to_dict()
+                        for condition in conditions
+                    )
                 )
 
 
@@ -506,10 +541,8 @@ def audio_unit() -> Dict[str, Any]:
 def valid_claim() -> Dict[str, Any]:
     return {
         "claim_text": "Steady rain falls outside.",
-        "claim_type": "faithful",
         "claim_status": "SUPPORTED",
         "evidence_sources": ["AUDIO_1"],
-        "counterfactual_edit_type": "none",
         "supporting_caption_phrases": ["Steady rain falls outside."],
         "contradiction_basis": "",
         "forbidden_inferences": [],
@@ -539,9 +572,7 @@ def contradicted_claim() -> Dict[str, Any]:
     claim.update(
         {
             "claim_text": "The weather outside is completely dry.",
-            "claim_type": "counterfactual",
             "claim_status": "CONTRADICTED",
-            "counterfactual_edit_type": "explicit_fact_modification",
             "contradiction_basis": (
                 "The caption explicitly says steady rain falls outside, which is "
                 "incompatible with completely dry weather."

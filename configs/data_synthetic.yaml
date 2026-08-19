@@ -7,8 +7,8 @@ input:
   max_units: null
 
 output:
-  # v3 stores only [supported|contradicted, AUDIO_N].
-  output_dir: "${cwd}/data/synthetic/clotho_audio_units_v3"
+  # v4 removes the redundant claim-type and edit-type columns.
+  output_dir: "${cwd}/data/synthetic/clotho_audio_units_v4"
   # Large-run profile: keep canonical Parquet plus durable checkpoints, but
   # skip duplicate final JSONL and audit/review artifacts.
   # Completed batches remain here if generation is interrupted.

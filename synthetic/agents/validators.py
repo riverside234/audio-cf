@@ -59,13 +59,7 @@ def validate_claim_record(
 ) -> None:
     audio_count = int(unit_record.get("audio_count", 0))
     validate_json(claim_record, CLAIM_OUTPUT_SCHEMA)
-    _require_equal("claim_type", claim_record, target_condition.claim_type)
     _require_equal("claim_status", claim_record, target_condition.claim_status)
-    _require_equal(
-        "counterfactual_edit_type",
-        claim_record,
-        target_condition.counterfactual_edit_type,
-    )
 
     evidence_sources = _string_list(claim_record.get("evidence_sources"))
     _validate_evidence_sources(evidence_sources, audio_count)
@@ -94,17 +88,15 @@ def validate_claim_record(
         unit_record,
     )
 
-    if claim_record.get("claim_type") == "faithful":
-        if claim_record.get("counterfactual_edit_type") != "none":
-            raise AgentValidationError("Faithful claims must use edit type 'none'.")
+    if claim_record.get("claim_status") == "SUPPORTED":
         return
 
     contradiction_basis = str(claim_record.get("contradiction_basis", "")).strip()
     if not contradiction_basis:
-        raise AgentValidationError("Counterfactual claims need contradiction_basis.")
+        raise AgentValidationError("Contradicted claims need contradiction_basis.")
     if _uses_caption_absence_as_negative_evidence(contradiction_basis):
         raise AgentValidationError(
-            "Counterfactual contradiction_basis relies on caption absence."
+            "Contradicted claim's contradiction_basis relies on caption absence."
         )
 
 
@@ -212,10 +204,8 @@ def build_final_example(
         "local_audio_paths": list(unit.get("local_audio_paths", [])),
         "audio_file_names": list(unit.get("audio_file_names", [])),
         "claim_text": claim["claim_text"],
-        "claim_type": claim["claim_type"],
         "claim_status": claim["claim_status"],
         "evidence_sources": list(claim["evidence_sources"]),
-        "counterfactual_edit_type": claim["counterfactual_edit_type"],
         "question": qa["question"],
         "answer": qa["answer"],
     }

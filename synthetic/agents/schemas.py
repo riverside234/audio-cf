@@ -6,20 +6,13 @@ import json
 from typing import Any, Dict, Mapping
 
 
-EXAMPLE_SCHEMA_VERSION = "synthetic_example_v3"
-CLAIM_PROMPT_VERSION = "claim_agent_v9"
+EXAMPLE_SCHEMA_VERSION = "synthetic_example_v4"
+CLAIM_PROMPT_VERSION = "claim_agent_v10"
 QA_PROMPT_VERSION = "qa_agent_v7"
 VERIFIER_PROMPT_VERSION = "verifier_agent_v8"
 VLLM_UNSUPPORTED_SCHEMA_KEYS = frozenset({"uniqueItems"})
 
-CLAIM_TYPES = ["faithful", "counterfactual"]
 CLAIM_STATUSES = ["SUPPORTED", "CONTRADICTED"]
-COUNTERFACTUAL_EDIT_TYPES = [
-    "none",
-    "event_swap",
-    "attribute_swap",
-    "explicit_fact_modification",
-]
 
 EVIDENCE_SOURCE_SCHEMA = {
     "type": "string",
@@ -31,10 +24,8 @@ CLAIM_OUTPUT_SCHEMA: Dict[str, Any] = {
     "additionalProperties": False,
     "required": [
         "claim_text",
-        "claim_type",
         "claim_status",
         "evidence_sources",
-        "counterfactual_edit_type",
         "supporting_caption_phrases",
         "contradiction_basis",
         "forbidden_inferences",
@@ -42,16 +33,11 @@ CLAIM_OUTPUT_SCHEMA: Dict[str, Any] = {
     ],
     "properties": {
         "claim_text": {"type": "string", "minLength": 1},
-        "claim_type": {"type": "string", "enum": CLAIM_TYPES},
         "claim_status": {"type": "string", "enum": CLAIM_STATUSES},
         "evidence_sources": {
             "type": "array",
             "items": EVIDENCE_SOURCE_SCHEMA,
             "uniqueItems": True,
-        },
-        "counterfactual_edit_type": {
-            "type": "string",
-            "enum": COUNTERFACTUAL_EDIT_TYPES,
         },
         "supporting_caption_phrases": {
             "type": "array",

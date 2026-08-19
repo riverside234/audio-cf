@@ -47,8 +47,9 @@ audio to establish one or several related propositions about one coherent event.
 Contradictions require explicit, clearly incompatible same-audio evidence.
 Caption-stated relative or subjective contrasts such as loud/quiet or
 gentle/aggressive are allowed; omission-based cases and source swaps are excluded.
-The default output directory is `data/synthetic/clotho_audio_units_v3`; do not
-append these rows to an older checkpoint with a different answer contract.
+The default output directory is `data/synthetic/clotho_audio_units_v4`; v4
+removes the redundant `claim_type` and `counterfactual_edit_type` columns. Do
+not append these rows to an older checkpoint with a different column contract.
 
 ```bash
 python data_filter.py --config configs/data_filter.yaml --overwrite
