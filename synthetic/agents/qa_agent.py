@@ -8,19 +8,20 @@ from typing import Any, Dict, Optional
 from synthetic.infrastructure.llm_client import VLLMClient
 from synthetic.infrastructure.prompt_loader import PromptTemplate, load_prompt
 from synthetic.infrastructure.retry import RetryConfig
-from synthetic.infrastructure.schema_io import parse_json_object, validate_json
+from synthetic.infrastructure.schema_io import parse_json_object
 
 from .reasoning import ReasoningPolicy, prepare_agent_response
 from .schemas import (
-    QA_OUTPUT_SCHEMA,
+    QA_GENERATION_SCHEMA,
     QA_PROMPT_VERSION,
     response_format_json_schema,
 )
 from .state import SyntheticGenerationState, compact_json, validation_feedback
+from .validators import build_qa_record
 
 
 class QAAgent:
-    """Generate a question and final answer from captions plus a claim."""
+    """Generate a question and explanation, then construct canonical fields."""
 
     def __init__(
         self,
@@ -64,8 +65,8 @@ class QAAgent:
             top_p=self.top_p,
             max_tokens=self.max_tokens,
             response_format=response_format_json_schema(
-                "qa_agent_output",
-                QA_OUTPUT_SCHEMA,
+                "qa_agent_generation",
+                QA_GENERATION_SCHEMA,
             ),
             retry_config=self.retry_config,
         )
@@ -78,5 +79,4 @@ class QAAgent:
             state.visible_reasoning_stripped.append("qa_agent")
         state.raw_qa_text = clean_text
         payload = parse_json_object(clean_text)
-        validate_json(payload, QA_OUTPUT_SCHEMA)
-        return payload
+        return build_qa_record(payload, state.claim_record)

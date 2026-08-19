@@ -102,6 +102,11 @@ def _basic_validate(payload: Mapping[str, Any], schema: Mapping[str, Any]) -> No
     if not isinstance(properties, dict):
         return
 
+    if schema.get("additionalProperties") is False:
+        unexpected = sorted(set(payload) - set(properties))
+        if unexpected:
+            raise SchemaValidationError(f"Unexpected fields: {unexpected}")
+
     for field, field_schema in properties.items():
         if field not in payload or not isinstance(field_schema, dict):
             continue

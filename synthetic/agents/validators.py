@@ -11,6 +11,7 @@ from .conditions import TargetCondition
 from .schemas import (
     CLAIM_OUTPUT_SCHEMA,
     EXAMPLE_SCHEMA_VERSION,
+    QA_GENERATION_SCHEMA,
     QA_OUTPUT_SCHEMA,
     VERIFIER_OUTPUT_SCHEMA,
 )
@@ -125,6 +126,27 @@ def validate_qa_record(
         raise AgentValidationError(
             "answer_source must exactly match claim evidence_sources in order."
         )
+
+
+def build_qa_record(
+    generated_record: Mapping[str, Any],
+    claim_record: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """Add benchmark fields that are deterministic from the validated claim."""
+
+    validate_json(generated_record, QA_GENERATION_SCHEMA)
+    claim_sources = _string_list(claim_record.get("evidence_sources"))
+    qa_record = {
+        "question": generated_record["question"],
+        "answer": _benchmark_answer(claim_record),
+        "answer_source": list(claim_sources),
+        "claim_evaluation_explanation": generated_record[
+            "claim_evaluation_explanation"
+        ],
+        "required_evidence_sources": list(claim_sources),
+    }
+    validate_json(qa_record, QA_OUTPUT_SCHEMA)
+    return qa_record
 
 
 def _benchmark_answer(claim_record: Mapping[str, Any]) -> List[str]:

@@ -17,6 +17,7 @@ from synthetic.agents.conditions import build_target_conditions
 from synthetic.agents.schemas import (
     CLAIM_OUTPUT_SCHEMA,
     EXAMPLE_SCHEMA_VERSION,
+    QA_GENERATION_SCHEMA,
     QA_OUTPUT_SCHEMA,
     response_format_json_schema,
 )
@@ -69,7 +70,9 @@ class SyntheticGenerationRunnerTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_fake_client_generates_valid_example_and_strips_reasoning(self) -> None:
         claim_response = f"<think>private check</think>\n{json.dumps(valid_claim())}"
-        fake_client = FakeLLMClient([claim_response, json.dumps(valid_qa())])
+        fake_client = FakeLLMClient(
+            [claim_response, json.dumps(valid_qa_generation())]
+        )
         runner = self._runner(fake_client)
 
         state = await runner.run_unit(audio_unit(), unit_index=0)
@@ -97,6 +100,17 @@ class SyntheticGenerationRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(fake_client.calls), 2)
         for call in fake_client.calls:
             self.assertEqual(call["response_format"]["type"], "json_schema")
+        qa_wire_schema = fake_client.calls[1]["response_format"]["json_schema"][
+            "schema"
+        ]
+        self.assertEqual(
+            set(qa_wire_schema["properties"]),
+            {"question", "claim_evaluation_explanation"},
+        )
+        self.assertEqual(
+            json.loads(state.raw_qa_text or "{}"),
+            valid_qa_generation(),
+        )
 
     async def test_semantic_validation_failure_retries_claim(self) -> None:
         invalid_claim = valid_claim()
@@ -105,7 +119,7 @@ class SyntheticGenerationRunnerTests(unittest.IsolatedAsyncioTestCase):
             [
                 json.dumps(invalid_claim),
                 json.dumps(valid_claim()),
-                json.dumps(valid_qa()),
+                json.dumps(valid_qa_generation()),
             ]
         )
         runner = self._runner(fake_client)
@@ -121,14 +135,14 @@ class SyntheticGenerationRunnerTests(unittest.IsolatedAsyncioTestCase):
             fake_client.calls[2]["messages"][0]["content"],
         )
 
-    async def test_qa_answer_judgment_and_source_are_retried(self) -> None:
-        invalid_qa = valid_qa()
-        invalid_qa["answer"] = ["contradicted", "AUDIO_2"]
+    async def test_qa_question_retries_while_answer_is_constructed(self) -> None:
+        invalid_qa = valid_qa_generation()
+        invalid_qa["question"] = "Rain?"
         fake_client = FakeLLMClient(
             [
                 json.dumps(valid_claim()),
                 json.dumps(invalid_qa),
-                json.dumps(valid_qa()),
+                json.dumps(valid_qa_generation()),
             ]
         )
         runner = self._runner(fake_client)
@@ -138,13 +152,13 @@ class SyntheticGenerationRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(fake_client.calls), 3)
         self.assertEqual(state.final_example["answer"], ["supported", "AUDIO_1"])
         self.assertIn(
-            "answer must be ['supported', 'AUDIO_1']",
+            "question must contain at least six words",
             state.validation_errors[0],
         )
 
     async def test_runner_generates_same_audio_contradiction(self) -> None:
         fake_client = FakeLLMClient(
-            [json.dumps(contradicted_claim()), json.dumps(contradicted_qa())]
+            [json.dumps(contradicted_claim()), json.dumps(valid_qa_generation())]
         )
         runner = self._runner(fake_client)
 
@@ -194,7 +208,7 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
             ],
         ]
         fake_client = FakeLLMClient(
-            [json.dumps(valid_claim()), json.dumps(valid_qa())]
+            [json.dumps(valid_claim()), json.dumps(valid_qa_generation())]
         )
         policy = ReasoningPolicy(mode="gemma4_vllm", strip_visible_reasoning=True)
         runner = SyntheticGenerationRunner(
@@ -205,7 +219,7 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
             ),
             qa_agent=QAAgent(
                 llm_client=fake_client,  # type: ignore[arg-type]
-                prompt_path=ROOT / "prompts" / "synthetic" / "qa_agent_v6.md",
+                prompt_path=ROOT / "prompts" / "synthetic" / "qa_agent_v7.md",
                 reasoning_policy=policy,
             ),
         )
@@ -226,17 +240,18 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
         self.assertLess(len(claim_prompt), 3600)
         self.assertLess(len(qa_prompt), 2200)
 
-    def test_qa_prompt_allows_varied_questions_and_canonical_answers(self) -> None:
+    def test_qa_prompt_delegates_canonical_fields_to_code(self) -> None:
         prompt = (
-            ROOT / "prompts" / "synthetic" / "qa_agent_v6.md"
+            ROOT / "prompts" / "synthetic" / "qa_agent_v7.md"
         ).read_text(encoding="utf-8")
 
         previous_prompt = (
-            ROOT / "prompts" / "synthetic" / "qa_agent_v5.md"
+            ROOT / "prompts" / "synthetic" / "qa_agent_v6.md"
         ).read_text(encoding="utf-8")
         self.assertIn("full claim or only its distinguishing detail", prompt)
         self.assertIn("Vary framing and clause order", prompt)
-        self.assertIn('["contradicted", "AUDIO_N"]', prompt)
+        self.assertIn("application constructs them deterministically", prompt)
+        self.assertNotIn('["contradicted", "AUDIO_N"]', prompt)
         self.assertLess(len(prompt), len(previous_prompt))
 
         verifier_prompt = (
@@ -331,6 +346,14 @@ class VLLMResponseSchemaTests(unittest.TestCase):
         qa["answer"] = ["supported", "AUDIO_1", "AUDIO_2"]
         with self.assertRaises(SchemaValidationError):
             validate_json(qa, QA_OUTPUT_SCHEMA)
+
+    def test_qa_generation_schema_rejects_model_supplied_answer(self) -> None:
+        generated = valid_qa_generation()
+        validate_json(generated, QA_GENERATION_SCHEMA)
+
+        generated["answer"] = ["supported", "AUDIO_1"]
+        with self.assertRaises(SchemaValidationError):
+            validate_json(generated, QA_GENERATION_SCHEMA)
 
     def test_multi_source_answer_is_rejected_by_fixed_benchmark_contract(self) -> None:
         claim = valid_claim()
@@ -476,6 +499,13 @@ def valid_qa() -> Dict[str, Any]:
     }
 
 
+def valid_qa_generation() -> Dict[str, Any]:
+    return {
+        "question": "How should the rainfall description be classified, and which audio supports it?",
+        "claim_evaluation_explanation": "AUDIO_1 explicitly describes steady rain.",
+    }
+
+
 def contradicted_claim() -> Dict[str, Any]:
     claim = valid_claim()
     claim.update(
@@ -491,19 +521,6 @@ def contradicted_claim() -> Dict[str, Any]:
         }
     )
     return claim
-
-
-def contradicted_qa() -> Dict[str, Any]:
-    qa = valid_qa()
-    qa.update(
-        {
-            "answer": ["contradicted", "AUDIO_1"],
-            "claim_evaluation_explanation": (
-                "AUDIO_1 explicitly describes rain, contradicting completely dry weather."
-            ),
-        }
-    )
-    return qa
 
 
 def contains_key(value: Any, target: str) -> bool:

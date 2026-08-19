@@ -8,7 +8,7 @@ from typing import Any, Dict, Mapping
 
 EXAMPLE_SCHEMA_VERSION = "synthetic_example_v3"
 CLAIM_PROMPT_VERSION = "claim_agent_v9"
-QA_PROMPT_VERSION = "qa_agent_v6"
+QA_PROMPT_VERSION = "qa_agent_v7"
 VERIFIER_PROMPT_VERSION = "verifier_agent_v8"
 VLLM_UNSUPPORTED_SCHEMA_KEYS = frozenset({"uniqueItems"})
 
@@ -63,6 +63,19 @@ CLAIM_OUTPUT_SCHEMA: Dict[str, Any] = {
             "items": {"type": "string"},
         },
         "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+    },
+}
+
+QA_GENERATION_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "question",
+        "claim_evaluation_explanation",
+    ],
+    "properties": {
+        "question": {"type": "string", "minLength": 1},
+        "claim_evaluation_explanation": {"type": "string", "minLength": 1},
     },
 }
 
