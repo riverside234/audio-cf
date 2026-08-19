@@ -23,7 +23,7 @@ output:
   write_parquet: true
   write_jsonl: false
   write_audit: true
-  review_sample_size: 8
+  review_sample_size: 10
   overwrite: false
 
 vllm:
