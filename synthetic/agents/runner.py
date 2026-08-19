@@ -64,7 +64,6 @@ class SyntheticGenerationRunner:
         return self.condition_sampler.choose(state.unit_record, state.unit_index)
 
     async def _run_claim_with_retries(self, state: SyntheticGenerationState) -> None:
-        audio_count = int(state.unit_record["audio_count"])
         assert state.target_condition is not None
         target = TargetCondition(**state.target_condition)
 
@@ -72,7 +71,7 @@ class SyntheticGenerationRunner:
             state.retry_count = attempt - 1
             try:
                 state.claim_record = await self.claim_agent.generate(state)
-                validate_claim_record(state.claim_record, target, audio_count)
+                validate_claim_record(state.claim_record, target, state.unit_record)
                 return
             except Exception as exc:
                 state.validation_errors.append(f"ClaimAgent attempt {attempt}: {exc}")

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Any, Dict, Iterable, List, Mapping, Sequence
+from typing import Any, Dict, List, Mapping, Sequence
 
 from synthetic.infrastructure.schema_io import SchemaValidationError, validate_json
 
@@ -15,7 +15,16 @@ from .schemas import (
     QA_OUTPUT_SCHEMA,
     VERIFIER_OUTPUT_SCHEMA,
 )
-from .state import SyntheticGenerationState, audio_source_labels
+from .state import (
+    SyntheticGenerationState,
+    audio_source_labels,
+    normalize_caption_groups,
+)
+
+
+GROUNDING_IGNORED_TOKENS = frozenset(
+    {"a", "an", "the", "be", "been", "being", "is", "are", "was", "were"}
+)
 
 
 class AgentValidationError(ValueError):
@@ -46,8 +55,9 @@ def validate_audio_unit_record(unit_record: Mapping[str, Any]) -> None:
 def validate_claim_record(
     claim_record: Mapping[str, Any],
     target_condition: TargetCondition,
-    audio_count: int,
+    unit_record: Mapping[str, Any],
 ) -> None:
+    audio_count = int(unit_record.get("audio_count", 0))
     validate_json(claim_record, CLAIM_OUTPUT_SCHEMA)
     _require_equal("claim_type", claim_record, target_condition.claim_type)
     _require_equal("claim_status", claim_record, target_condition.claim_status)
@@ -78,6 +88,11 @@ def validate_claim_record(
         raise AgentValidationError(
             "Claims need supporting_caption_phrases containing positive evidence."
         )
+    _validate_supporting_caption_phrases(
+        supporting_phrases,
+        evidence_sources[0],
+        unit_record,
+    )
 
     if claim_record.get("claim_type") == "faithful":
         if claim_record.get("counterfactual_edit_type") != "none":
@@ -219,6 +234,62 @@ def _validate_evidence_sources(sources: Sequence[str], audio_count: int) -> None
     unknown = sorted(set(sources) - valid_sources)
     if unknown:
         raise AgentValidationError(f"Unknown evidence sources: {unknown}.")
+
+
+def _validate_supporting_caption_phrases(
+    phrases: Sequence[str],
+    evidence_source: str,
+    unit_record: Mapping[str, Any],
+) -> None:
+    caption_groups = normalize_caption_groups(unit_record.get("audio_captions"))
+    source_index = int(evidence_source.removeprefix("AUDIO_")) - 1
+    source_captions = (
+        caption_groups[source_index] if source_index < len(caption_groups) else []
+    )
+    if not source_captions:
+        raise AgentValidationError(
+            f"{evidence_source} has no captions for grounding validation."
+        )
+
+    ungrounded = [
+        phrase
+        for phrase in phrases
+        if not any(
+            _is_caption_grounded_phrase(phrase, caption)
+            for caption in source_captions
+        )
+    ]
+    if ungrounded:
+        raise AgentValidationError(
+            "supporting_caption_phrases must be exact or near-exact phrases from "
+            f"{evidence_source} captions; unmatched phrases: {ungrounded!r}."
+        )
+
+
+def _is_caption_grounded_phrase(phrase: str, caption: str) -> bool:
+    phrase_tokens = _grounding_tokens(phrase)
+    caption_tokens = _grounding_tokens(caption)
+    if not phrase_tokens or not caption_tokens:
+        return False
+    if len(phrase_tokens) > len(caption_tokens):
+        return False
+
+    width = len(phrase_tokens)
+    return any(
+        caption_tokens[start : start + width] == phrase_tokens
+        for start in range(len(caption_tokens) - width + 1)
+    )
+
+
+def _grounding_tokens(text: str) -> List[str]:
+    return [
+        token
+        for token in "".join(
+            character.casefold() if character.isalnum() else " "
+            for character in str(text)
+        ).split()
+        if token not in GROUNDING_IGNORED_TOKENS
+    ]
 
 
 def _string_list(value: Any) -> List[str]:

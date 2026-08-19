@@ -399,13 +399,35 @@ class VLLMResponseSchemaTests(unittest.TestCase):
         )
         target = build_target_conditions(2)[1]
 
-        validate_claim_record(claim, target, audio_count=2)
+        validate_claim_record(claim, target, unit_record=audio_unit())
 
         claim["contradiction_basis"] = (
             "Dry weather is not mentioned in the captions."
         )
         with self.assertRaisesRegex(ValueError, "relies on caption absence"):
-            validate_claim_record(claim, target, audio_count=2)
+            validate_claim_record(claim, target, unit_record=audio_unit())
+
+    def test_supporting_phrases_must_match_declared_source_captions(self) -> None:
+        claim = valid_claim()
+        target = build_target_conditions(2)[0]
+
+        claim["supporting_caption_phrases"] = ["An elephant trumpets nearby."]
+        with self.assertRaisesRegex(ValueError, "unmatched phrases"):
+            validate_claim_record(claim, target, unit_record=audio_unit())
+
+        claim["supporting_caption_phrases"] = ["Cars pass on a busy street."]
+        with self.assertRaisesRegex(ValueError, "AUDIO_1 captions"):
+            validate_claim_record(claim, target, unit_record=audio_unit())
+
+    def test_supporting_phrase_allows_normalized_caption_fragment(self) -> None:
+        claim = valid_claim()
+        claim["supporting_caption_phrases"] = ["the steady RAIN falls outside"]
+
+        validate_claim_record(
+            claim,
+            build_target_conditions(2)[0],
+            unit_record=audio_unit(),
+        )
 
     def test_claim_can_use_multiple_captions_from_one_audio(self) -> None:
         supported = valid_claim()
@@ -413,7 +435,13 @@ class VLLMResponseSchemaTests(unittest.TestCase):
             "Steady rain falls outside.",
             "Rain taps against a roof.",
         ]
-        validate_claim_record(supported, build_target_conditions(2)[0], audio_count=2)
+        unit = audio_unit()
+        unit["audio_captions"][0].append("Rain taps against a roof.")
+        validate_claim_record(
+            supported,
+            build_target_conditions(2)[0],
+            unit_record=unit,
+        )
 
         contradicted = contradicted_claim()
         contradicted["supporting_caption_phrases"] = [
@@ -427,7 +455,7 @@ class VLLMResponseSchemaTests(unittest.TestCase):
         validate_claim_record(
             contradicted,
             build_target_conditions(2)[1],
-            audio_count=2,
+            unit_record=unit,
         )
 
         contradicted["contradiction_basis"] = (
@@ -436,7 +464,7 @@ class VLLMResponseSchemaTests(unittest.TestCase):
         validate_claim_record(
             contradicted,
             build_target_conditions(2)[1],
-            audio_count=2,
+            unit_record=unit,
         )
 
     def test_generation_targets_have_one_determining_source(self) -> None:
