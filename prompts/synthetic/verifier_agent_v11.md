@@ -1,4 +1,4 @@
-Verify one caption-grounded benchmark example without rewriting it.
+Verify one caption-grounded benchmark example without rewriting it. This is the mandatory final acceptance gate.
 
 Relevant captions:
 {audio_context}
@@ -29,8 +29,9 @@ Checks:
 - Reject absence-only reasoning, unrelated additions, general-knowledge-only conflicts, and cross-audio source swaps.
 - Reject a contradicted record when a source caption directly states its central claim, or when contradiction_basis describes a change missing from the literal claim_text.
 - supporting_caption_phrases must come from the evidence audio. For CONTRADICTED, contradiction_basis must identify at least one central conflict without planning or self-correction.
-- The question must be grammatical, evaluate the literal claim_text, and ask for the evidence judgment and determining audio without revealing either answer.
+- FAIL if the question omits either the evidence judgment or the request for which audio/recording determines it. Also FAIL if it names an AUDIO_N label or supplies the caption's corrective alternative.
 - The explanation must discuss an actual conflict present in the literal claim, not an intended edit found only in contradiction_basis.
 - The answer must be exactly ["supported", "AUDIO_N"] or ["contradicted", "AUDIO_N"], matching claim_status and the evidence source. answer_source and required_evidence_sources must equal evidence_sources.
-- Return PASS only when every check passes; otherwise return FAIL with concise errors and corrections.
+- Return PASS only when every check passes. For PASS, use an empty validation_errors list, null corrected_claim_status, and an empty corrected_evidence_sources list.
+- For FAIL, include at least one concise validation error. Supply corrected fields only when the correction is unambiguous.
 - Return JSON only, without markdown or visible reasoning.

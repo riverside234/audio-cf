@@ -274,12 +274,12 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
         runner = SyntheticGenerationRunner(
             claim_agent=ClaimAgent(
                 llm_client=fake_client,  # type: ignore[arg-type]
-                prompt_path=ROOT / "prompts" / "synthetic" / "claim_agent_v11.md",
+                prompt_path=ROOT / "prompts" / "synthetic" / "claim_agent_v12.md",
                 reasoning_policy=policy,
             ),
             qa_agent=QAAgent(
                 llm_client=fake_client,  # type: ignore[arg-type]
-                prompt_path=ROOT / "prompts" / "synthetic" / "qa_agent_v8.md",
+                prompt_path=ROOT / "prompts" / "synthetic" / "qa_agent_v9.md",
                 reasoning_policy=policy,
             ),
             verifier_agent=VerifierAgent(
@@ -287,7 +287,7 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
                 prompt_path=ROOT
                 / "prompts"
                 / "synthetic"
-                / "verifier_agent_v10.md",
+                / "verifier_agent_v11.md",
                 reasoning_policy=policy,
             ),
         )
@@ -310,24 +310,26 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
 
     def test_qa_prompt_delegates_canonical_fields_to_code(self) -> None:
         prompt = (
-            ROOT / "prompts" / "synthetic" / "qa_agent_v8.md"
+            ROOT / "prompts" / "synthetic" / "qa_agent_v9.md"
         ).read_text(encoding="utf-8")
 
         previous_prompt = (
-            ROOT / "prompts" / "synthetic" / "qa_agent_v7.md"
+            ROOT / "prompts" / "synthetic" / "qa_agent_v8.md"
         ).read_text(encoding="utf-8")
         self.assertIn("Evaluate the literal claim_text", prompt)
         self.assertIn("Vary framing and clause order", prompt)
         self.assertIn("do not imply every modifier conflicts", prompt)
+        self.assertIn("Never name an AUDIO_N label", prompt)
+        self.assertIn("caption's corrective alternative", prompt)
         self.assertIn("application constructs them deterministically", prompt)
         self.assertNotIn('["contradicted", "AUDIO_N"]', prompt)
         self.assertLess(len(prompt), 1800)
 
         verifier_prompt = (
-            ROOT / "prompts" / "synthetic" / "verifier_agent_v10.md"
+            ROOT / "prompts" / "synthetic" / "verifier_agent_v11.md"
         ).read_text(encoding="utf-8")
         previous_verifier_prompt = (
-            ROOT / "prompts" / "synthetic" / "verifier_agent_v9.md"
+            ROOT / "prompts" / "synthetic" / "verifier_agent_v10.md"
         ).read_text(encoding="utf-8")
         self.assertIn("at least one central claim detail", verifier_prompt)
         self.assertIn("not proof of physical impossibility", verifier_prompt)
@@ -335,15 +337,17 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("cross-audio source swaps", verifier_prompt)
         self.assertIn("mandatory final acceptance gate", verifier_prompt)
         self.assertIn("empty validation_errors list", verifier_prompt)
+        self.assertIn("request for which audio/recording", verifier_prompt)
+        self.assertIn("names an AUDIO_N label", verifier_prompt)
         self.assertGreater(len(verifier_prompt), len(previous_verifier_prompt))
 
     def test_claim_prompt_allows_related_and_explicit_subjective_contrasts(self) -> None:
         prompt = (
-            ROOT / "prompts" / "synthetic" / "claim_agent_v11.md"
+            ROOT / "prompts" / "synthetic" / "claim_agent_v12.md"
         ).read_text(encoding="utf-8")
 
         previous_prompt = (
-            ROOT / "prompts" / "synthetic" / "claim_agent_v10.md"
+            ROOT / "prompts" / "synthetic" / "claim_agent_v11.md"
         ).read_text(encoding="utf-8")
         self.assertIn("one coherent event", prompt)
         self.assertIn("combine related propositions", prompt)
@@ -355,7 +359,10 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("loud versus quiet", prompt)
         self.assertIn("another audio", prompt)
         self.assertIn("directly stated by a selected caption", prompt)
-        self.assertIn("change appears in the final claim_text", prompt)
+        self.assertIn("conflicting alternative must appear in claim_text", prompt)
+        self.assertIn("compare the literal claim_text", prompt)
+        self.assertIn("must not merely restate the caption", prompt)
+        self.assertIn("may describe only conflicts present in claim_text", prompt)
         self.assertNotIn("disprove every changed proposition", prompt)
         self.assertNotIn("counterfactual", prompt.lower())
         self.assertNotIn("claim_type", prompt)

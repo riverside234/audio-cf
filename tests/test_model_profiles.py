@@ -103,8 +103,8 @@ class ModelProfileTests(unittest.TestCase):
     def test_model_profiles_use_stage_specific_synthetic_sampling(self) -> None:
         expected = {
             "default": (0.5, 0.95),
-            "claim_agent": (0.7, 0.95),
-            "qa_agent": (0.5, 0.95),
+            "claim_agent": (0.5, 0.90),
+            "qa_agent": (0.3, 0.90),
             "verifier_agent": (0.0, 1.0),
         }
         for profile in ("gemma4", "qwen38"):

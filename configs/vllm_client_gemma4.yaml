@@ -39,14 +39,14 @@ generation:
     top_p: 0.95
     max_tokens: 3072
   claim_agent:
-    # Moderate sampling preserves useful claim diversity.
-    temperature: 0.7
-    top_p: 0.95
+    # Keep claim diversity while reducing inconsistent contradiction edits.
+    temperature: 0.5
+    top_p: 0.90
     max_tokens: 3072
   qa_agent:
-    # Grounded task generation favors Bonito's lower-temperature regime.
-    temperature: 0.5
-    top_p: 0.95
+    # QA formatting benefits from a more conservative sampling regime.
+    temperature: 0.3
+    top_p: 0.90
     max_tokens: 3072
   verifier_agent:
     # Verification is a fixed judgment, so use greedy decoding.
@@ -67,10 +67,10 @@ agents:
     strategy: "cycle"
     seed: 42
   prompts:
-    claim_agent: "prompts/synthetic/claim_agent_v11.md"
-    qa_agent: "prompts/synthetic/qa_agent_v8.md"
-    verifier_agent: "prompts/synthetic/verifier_agent_v10.md"
-  prompt_version: "claim_agent_v11+qa_agent_v8+verifier_agent_v10+gemma4_thinking2048_v9"
+    claim_agent: "prompts/synthetic/claim_agent_v12.md"
+    qa_agent: "prompts/synthetic/qa_agent_v9.md"
+    verifier_agent: "prompts/synthetic/verifier_agent_v11.md"
+  prompt_version: "claim_agent_v12+qa_agent_v9+verifier_agent_v11+gemma4_thinking2048_v10"
 
 batching:
   runner_max_concurrency: 32
