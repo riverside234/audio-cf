@@ -7,8 +7,8 @@ from typing import Any, Dict, Mapping
 
 
 EXAMPLE_SCHEMA_VERSION = "synthetic_example_v3"
-CLAIM_PROMPT_VERSION = "claim_agent_v7"
-QA_PROMPT_VERSION = "qa_agent_v5"
+CLAIM_PROMPT_VERSION = "claim_agent_v8"
+QA_PROMPT_VERSION = "qa_agent_v6"
 VERIFIER_PROMPT_VERSION = "verifier_agent_v7"
 VLLM_UNSUPPORTED_SCHEMA_KEYS = frozenset({"uniqueItems"})
 

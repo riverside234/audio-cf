@@ -200,12 +200,12 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
         runner = SyntheticGenerationRunner(
             claim_agent=ClaimAgent(
                 llm_client=fake_client,  # type: ignore[arg-type]
-                prompt_path=ROOT / "prompts" / "synthetic" / "claim_agent_v7.md",
+                prompt_path=ROOT / "prompts" / "synthetic" / "claim_agent_v8.md",
                 reasoning_policy=policy,
             ),
             qa_agent=QAAgent(
                 llm_client=fake_client,  # type: ignore[arg-type]
-                prompt_path=ROOT / "prompts" / "synthetic" / "qa_agent_v5.md",
+                prompt_path=ROOT / "prompts" / "synthetic" / "qa_agent_v6.md",
                 reasoning_policy=policy,
             ),
         )
@@ -228,14 +228,16 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
 
     def test_qa_prompt_allows_varied_questions_and_canonical_answers(self) -> None:
         prompt = (
-            ROOT / "prompts" / "synthetic" / "qa_agent_v5.md"
+            ROOT / "prompts" / "synthetic" / "qa_agent_v6.md"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("naturally varied question", prompt)
-        self.assertIn("distinguishing part", prompt)
-        self.assertIn("Do not repeatedly use the template", prompt)
+        previous_prompt = (
+            ROOT / "prompts" / "synthetic" / "qa_agent_v5.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("full claim or only its distinguishing detail", prompt)
+        self.assertIn("Vary framing and clause order", prompt)
         self.assertIn('["contradicted", "AUDIO_N"]', prompt)
-        self.assertIn('Never use "unsupported"', prompt)
+        self.assertLess(len(prompt), len(previous_prompt))
 
         verifier_prompt = (
             ROOT / "prompts" / "synthetic" / "verifier_agent_v7.md"
@@ -245,20 +247,21 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
 
     def test_claim_prompt_allows_related_and_explicit_subjective_contrasts(self) -> None:
         prompt = (
-            ROOT / "prompts" / "synthetic" / "claim_agent_v7.md"
+            ROOT / "prompts" / "synthetic" / "claim_agent_v8.md"
         ).read_text(encoding="utf-8")
 
+        previous_prompt = (
+            ROOT / "prompts" / "synthetic" / "claim_agent_v7.md"
+        ).read_text(encoding="utf-8")
         self.assertIn("one coherent event", prompt)
-        self.assertIn("several related propositions", prompt)
-        self.assertIn("one caption or several captions", prompt)
-        self.assertIn("clearly incompatible alternatives", prompt)
+        self.assertIn("combine related propositions", prompt)
+        self.assertIn("multiple phrases must describe the same event", prompt)
+        self.assertIn("disprove every changed proposition", prompt)
         self.assertIn("gentle versus aggressive", prompt)
         self.assertIn("loud versus quiet", prompt)
-        self.assertIn("caption explicitly states", prompt)
-        self.assertIn("prove every changed proposition incompatible", prompt)
-        self.assertIn("positive caption evidence from the same audio", prompt)
-        self.assertIn("never move a fact between", prompt)
-        self.assertIn("captions omit it", prompt)
+        self.assertIn("Caption omission", prompt)
+        self.assertIn("another audio", prompt)
+        self.assertLess(len(prompt), len(previous_prompt))
 
     def test_source_references_and_feedback_are_bounded(self) -> None:
         labels = prompt_audio_source_labels(
