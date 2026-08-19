@@ -68,10 +68,10 @@ agents:
     strategy: "cycle"
     seed: 42
   prompts:
-    claim_agent: "prompts/synthetic/claim_agent_v8.md"
+    claim_agent: "prompts/synthetic/claim_agent_v9.md"
     qa_agent: "prompts/synthetic/qa_agent_v6.md"
-    verifier_agent: "prompts/synthetic/verifier_agent_v7.md"
-  prompt_version: "claim_agent_v8+qa_agent_v6+verifier_agent_v7+gemma4_thinking1024_v8"
+    verifier_agent: "prompts/synthetic/verifier_agent_v8.md"
+  prompt_version: "claim_agent_v9+qa_agent_v6+verifier_agent_v8+gemma4_thinking1024_v8"
 
 batching:
   runner_max_concurrency: 32

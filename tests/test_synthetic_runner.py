@@ -200,7 +200,7 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
         runner = SyntheticGenerationRunner(
             claim_agent=ClaimAgent(
                 llm_client=fake_client,  # type: ignore[arg-type]
-                prompt_path=ROOT / "prompts" / "synthetic" / "claim_agent_v8.md",
+                prompt_path=ROOT / "prompts" / "synthetic" / "claim_agent_v9.md",
                 reasoning_policy=policy,
             ),
             qa_agent=QAAgent(
@@ -240,14 +240,14 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
         self.assertLess(len(prompt), len(previous_prompt))
 
         verifier_prompt = (
-            ROOT / "prompts" / "synthetic" / "verifier_agent_v7.md"
+            ROOT / "prompts" / "synthetic" / "verifier_agent_v8.md"
         ).read_text(encoding="utf-8")
         self.assertIn("Reject every cross-audio source swap", verifier_prompt)
         self.assertIn("Caption omission", verifier_prompt)
 
     def test_claim_prompt_allows_related_and_explicit_subjective_contrasts(self) -> None:
         prompt = (
-            ROOT / "prompts" / "synthetic" / "claim_agent_v8.md"
+            ROOT / "prompts" / "synthetic" / "claim_agent_v9.md"
         ).read_text(encoding="utf-8")
 
         previous_prompt = (
@@ -261,6 +261,7 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("loud versus quiet", prompt)
         self.assertIn("Caption omission", prompt)
         self.assertIn("another audio", prompt)
+        self.assertIn("may paraphrase", prompt)
         self.assertLess(len(prompt), len(previous_prompt))
 
     def test_source_references_and_feedback_are_bounded(self) -> None:
@@ -368,12 +369,19 @@ class VLLMResponseSchemaTests(unittest.TestCase):
 
         validate_qa_record(qa, claim, audio_count=2)
 
-    def test_contradiction_basis_must_quote_positive_caption_evidence(self) -> None:
+    def test_contradiction_basis_may_paraphrase_positive_caption_evidence(self) -> None:
         claim = contradicted_claim()
-        claim["contradiction_basis"] = "The generated claim is incorrect."
+        claim["contradiction_basis"] = (
+            "Ongoing rainfall conflicts with the claim of completely dry weather."
+        )
         target = build_target_conditions(2)[1]
 
-        with self.assertRaisesRegex(ValueError, "must quote"):
+        validate_claim_record(claim, target, audio_count=2)
+
+        claim["contradiction_basis"] = (
+            "Dry weather is not mentioned in the captions."
+        )
+        with self.assertRaisesRegex(ValueError, "relies on caption absence"):
             validate_claim_record(claim, target, audio_count=2)
 
     def test_claim_can_use_multiple_captions_from_one_audio(self) -> None:
@@ -400,14 +408,13 @@ class VLLMResponseSchemaTests(unittest.TestCase):
         )
 
         contradicted["contradiction_basis"] = (
-            "Steady rain falls outside, which conflicts with dry weather."
+            "Ongoing rain conflicts with the claim of completely dry weather."
         )
-        with self.assertRaisesRegex(ValueError, "every supporting caption phrase"):
-            validate_claim_record(
-                contradicted,
-                build_target_conditions(2)[1],
-                audio_count=2,
-            )
+        validate_claim_record(
+            contradicted,
+            build_target_conditions(2)[1],
+            audio_count=2,
+        )
 
     def test_generation_targets_have_one_determining_source(self) -> None:
         for audio_count in (1, 2, 3, 5):

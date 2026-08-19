@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import re
 from typing import Any, Dict, Iterable, List, Mapping, Sequence
 
 from synthetic.infrastructure.schema_io import SchemaValidationError, validate_json
@@ -87,16 +86,6 @@ def validate_claim_record(
     contradiction_basis = str(claim_record.get("contradiction_basis", "")).strip()
     if not contradiction_basis:
         raise AgentValidationError("Counterfactual claims need contradiction_basis.")
-    normalized_basis = _normalize_words(contradiction_basis)
-    normalized_phrases = [
-        _normalize_words(phrase)
-        for phrase in supporting_phrases
-        if _normalize_words(phrase)
-    ]
-    if not all(phrase in normalized_basis for phrase in normalized_phrases):
-        raise AgentValidationError(
-            "Counterfactual contradiction_basis must quote every supporting caption phrase."
-        )
     if _uses_caption_absence_as_negative_evidence(contradiction_basis):
         raise AgentValidationError(
             "Counterfactual contradiction_basis relies on caption absence."
@@ -227,11 +216,6 @@ def _uses_caption_absence_as_negative_evidence(text: str) -> bool:
         "not in the captions",
     ]
     return any(flag in lowered for flag in red_flags)
-
-
-def _normalize_words(text: str) -> str:
-    return " ".join(re.findall(r"[a-z0-9]+", text.lower()))
-
 
 def _example_id(unit_id: str, claim_text: str, question: str) -> str:
     key = f"{unit_id}\n{claim_text}\n{question}"
