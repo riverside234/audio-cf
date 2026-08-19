@@ -26,7 +26,11 @@ from synthetic.agents.state import (
     validation_feedback,
 )
 from synthetic.agents.validators import validate_claim_record, validate_qa_record
-from synthetic.infrastructure.schema_io import SchemaValidationError, validate_json
+from synthetic.infrastructure.schema_io import (
+    SchemaValidationError,
+    parse_json_object,
+    validate_json,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -284,6 +288,13 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
 
 
 class VLLMResponseSchemaTests(unittest.TestCase):
+    def test_doubled_json_opening_is_rejected_with_actionable_error(self) -> None:
+        with self.assertRaisesRegex(
+            SchemaValidationError,
+            "doubled opening brace.*MTP disabled",
+        ):
+            parse_json_object('{{"claim_text":"A sound occurs."}')
+
     def test_vllm_schema_omits_unique_items_without_mutating_local_schema(self) -> None:
         response_format = response_format_json_schema(
             "claim_agent_output",

@@ -67,8 +67,11 @@ uses `0.5/0.95`, and VerifierAgent uses greedy decoding. A 1,024-token thinking
 budget leaves the remainder of each 2,048-token completion budget for the
 required final JSON; the server context is 8,192.
 vLLM 0.25.x requires the V1 model runner for thinking-budget enforcement.
-The server enables Qwen3.8's native MTP head with three speculative tokens;
-vLLM verifies drafts against the target model, preserving output quality.
+The server uses xgrammar with structured output enabled during reasoning. MTP
+is intentionally disabled: released vLLM builds can miss the transition from
+Qwen reasoning to the schema-constrained final answer when speculative decoding
+is active, producing malformed JSON prefixes. Restart the server after pulling
+this configuration; changing the YAML does not affect an already running vLLM.
 The Qwen client requests the reasoning field solely to recover a complete JSON
 object misplaced there by this parser bug; reasoning prose is never accepted.
 

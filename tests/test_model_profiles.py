@@ -93,9 +93,10 @@ class ModelProfileTests(unittest.TestCase):
 
         server = load_yaml(ROOT / "configs" / "vllm_server_qwen38.yaml")
         self.assertTrue(server["language-model-only"])
+        self.assertNotIn("speculative-config", server)
         self.assertEqual(
-            server["speculative-config"],
-            {"method": "mtp", "num_speculative_tokens": 3},
+            server["structured-outputs-config"],
+            {"backend": "xgrammar", "enable_in_reasoning": True},
         )
 
     def test_model_profiles_use_stage_specific_synthetic_sampling(self) -> None:

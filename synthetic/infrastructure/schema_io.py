@@ -38,6 +38,14 @@ def parse_json_object(text: str) -> Dict[str, Any]:
     if match:
         stripped = match.group(1).strip()
 
+    if stripped.startswith("{{"):
+        raise SchemaValidationError(
+            "Generated text starts with a doubled opening brace. This matches "
+            "a known vLLM Qwen reasoning/structured-output boundary failure; "
+            "restart the Qwen server with MTP disabled. The malformed output "
+            "was rejected without repair."
+        )
+
     try:
         parsed = json.loads(stripped)
     except json.JSONDecodeError as exc:

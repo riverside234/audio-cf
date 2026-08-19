@@ -27,15 +27,18 @@ enable-chunked-prefill: true
 # Qwen3.8 emits <think>...</think>; qwen3 separates it from message.content.
 reasoning-parser: "qwen3"
 
+# Apply the JSON grammar while the reasoning parser is active. Without this,
+# malformed prefixes can reach the client before constrained decoding starts.
+structured-outputs-config:
+  backend: "xgrammar"
+  enable_in_reasoning: true
+
 # This pipeline sends caption text only. Skip vision loading/profiling to leave
 # more memory for KV cache and concurrent requests.
 language-model-only: true
 
-# Qwen3.8 ships a native multi-step MTP head. vLLM verifies draft tokens
-# against the target model, so speculative decoding preserves its distribution.
-speculative-config:
-  method: "mtp"
-  num_speculative_tokens: 3
+# Keep MTP off for schema-constrained reasoning. Current released vLLM builds
+# can cross the reasoning/final boundary before activating the JSON grammar.
 
 tensor-parallel-size: 1
 download-dir: "/data/not_backed_up/yxu209/huggingface/cache"
