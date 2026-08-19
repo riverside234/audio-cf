@@ -200,7 +200,7 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
         runner = SyntheticGenerationRunner(
             claim_agent=ClaimAgent(
                 llm_client=fake_client,  # type: ignore[arg-type]
-                prompt_path=ROOT / "prompts" / "synthetic" / "claim_agent_v5.md",
+                prompt_path=ROOT / "prompts" / "synthetic" / "claim_agent_v6.md",
                 reasoning_policy=policy,
             ),
             qa_agent=QAAgent(
@@ -238,20 +238,22 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('Never use "unsupported"', prompt)
 
         verifier_prompt = (
-            ROOT / "prompts" / "synthetic" / "verifier_agent_v5.md"
+            ROOT / "prompts" / "synthetic" / "verifier_agent_v6.md"
         ).read_text(encoding="utf-8")
         self.assertIn("Reject every cross-audio source swap", verifier_prompt)
         self.assertIn("Caption omission", verifier_prompt)
 
-    def test_claim_prompt_requires_atomic_and_careful_source_grounding(self) -> None:
+    def test_claim_prompt_allows_related_propositions_and_objective_contradictions(self) -> None:
         prompt = (
-            ROOT / "prompts" / "synthetic" / "claim_agent_v5.md"
+            ROOT / "prompts" / "synthetic" / "claim_agent_v6.md"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("complete, atomic sentence", prompt)
+        self.assertIn("one coherent event", prompt)
+        self.assertIn("several related propositions", prompt)
         self.assertIn("one caption or several captions", prompt)
-        self.assertIn("converge on and strengthen one atomic proposition", prompt)
-        self.assertIn("mutually incompatible alternative", prompt)
+        self.assertIn("objectively incompatible alternatives", prompt)
+        self.assertIn("gentle versus aggressive", prompt)
+        self.assertIn("prove every changed proposition incompatible", prompt)
         self.assertIn("positive caption evidence from the same audio", prompt)
         self.assertIn("never move a fact between", prompt)
         self.assertIn("captions omit it", prompt)

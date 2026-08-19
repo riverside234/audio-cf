@@ -45,7 +45,8 @@ def build_target_conditions(audio_count: int) -> List[TargetCondition]:
                 counterfactual_edit_type="none",
                 instruction=(
                     f"Create one short faithful claim supported by one or more "
-                    f"explicit captions from {label}. Keep the claim atomic."
+                    f"explicit captions from {label}. Describe one coherent event; "
+                    "one or several related propositions are allowed."
                 ),
             )
         )
@@ -57,11 +58,12 @@ def build_target_conditions(audio_count: int) -> List[TargetCondition]:
                 evidence_sources=[label],
                 counterfactual_edit_type="explicit_fact_modification",
                 instruction=(
-                    f"Create one short claim about {label} that directly changes one "
-                    "atomic proposition established by one or more captions into a "
-                    "mutually incompatible alternative. "
+                    f"Create one short claim about one coherent event in {label} that "
+                    "changes one or more related caption-established propositions into "
+                    "objectively incompatible alternatives. Avoid subjective contrasts. "
                     f"The positive caption evidence from {label} must prove the "
-                    "contradiction; do not rely on omission or another audio source."
+                    "contradiction for every change; do not rely on omission or another "
+                    "audio source."
                 ),
             )
         )
