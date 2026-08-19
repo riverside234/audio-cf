@@ -66,7 +66,9 @@ use stage-specific synthetic-data sampling: ClaimAgent uses `0.7/0.95`, QAAgent
 uses `0.5/0.95`, and VerifierAgent uses greedy decoding. A 1,024-token thinking
 budget leaves the remainder of each 2,048-token completion budget for the
 required final JSON; the server context is 8,192.
-vLLM 0.25.x requires the V1 model runner for thinking-budget enforcement.
+Current vLLM Model Runner V2 does not support `thinking_token_budget`, so keep
+`VLLM_USE_V2_MODEL_RUNNER=0` while this profile sends its 1,024-token cap. The
+Triton GDN prefill backend avoids FlashInfer's first-run GDN JIT on H100.
 The server uses xgrammar with structured output enabled during reasoning. MTP
 is intentionally disabled: released vLLM builds can miss the transition from
 Qwen reasoning to the schema-constrained final answer when speculative decoding
@@ -76,8 +78,9 @@ The Qwen client requests the reasoning field solely to recover a complete JSON
 object misplaced there by this parser bug; reasoning prose is never accepted.
 
 ```bash
-VLLM_USE_V2_MODEL_RUNNER=0 CUDA_VISIBLE_DEVICES=0 \
-  vllm serve --config configs/vllm_server_qwen38.yaml
+CUDA_VISIBLE_DEVICES=2 VLLM_USE_V2_MODEL_RUNNER=0 \
+  vllm serve --config configs/vllm_server_qwen38.yaml \
+  --gdn-prefill-backend triton
 python data_synthetic.py \
   --config configs/data_synthetic.yaml \
   --vllm-config configs/vllm_client_qwen38.yaml \
