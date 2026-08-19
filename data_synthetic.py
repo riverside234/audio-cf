@@ -568,7 +568,7 @@ def build_stats(
         "prompt_version": get_nested(
             vllm_config,
             ["agents", "prompt_version"],
-            "claim_agent_v10+qa_agent_v7+verifier_agent_v8",
+            "claim_agent_v11+qa_agent_v8+verifier_agent_v9",
         ),
         "runner_max_concurrency": get_nested(
             vllm_config,
@@ -788,15 +788,15 @@ def resolve_prompt_paths(vllm_config: Mapping[str, Any]) -> Dict[str, Path]:
     prompts = dict(get_nested(vllm_config, ["agents", "prompts"], {}) or {})
     return {
         "claim_agent": resolve_path(
-            prompts.get("claim_agent", "prompts/synthetic/claim_agent_v10.md"),
+            prompts.get("claim_agent", "prompts/synthetic/claim_agent_v11.md"),
             Path.cwd(),
         ),
         "qa_agent": resolve_path(
-            prompts.get("qa_agent", "prompts/synthetic/qa_agent_v7.md"),
+            prompts.get("qa_agent", "prompts/synthetic/qa_agent_v8.md"),
             Path.cwd(),
         ),
         "verifier_agent": resolve_path(
-            prompts.get("verifier_agent", "prompts/synthetic/verifier_agent_v8.md"),
+            prompts.get("verifier_agent", "prompts/synthetic/verifier_agent_v9.md"),
             Path.cwd(),
         ),
     }

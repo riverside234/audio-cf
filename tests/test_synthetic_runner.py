@@ -224,12 +224,12 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
         runner = SyntheticGenerationRunner(
             claim_agent=ClaimAgent(
                 llm_client=fake_client,  # type: ignore[arg-type]
-                prompt_path=ROOT / "prompts" / "synthetic" / "claim_agent_v10.md",
+                prompt_path=ROOT / "prompts" / "synthetic" / "claim_agent_v11.md",
                 reasoning_policy=policy,
             ),
             qa_agent=QAAgent(
                 llm_client=fake_client,  # type: ignore[arg-type]
-                prompt_path=ROOT / "prompts" / "synthetic" / "qa_agent_v7.md",
+                prompt_path=ROOT / "prompts" / "synthetic" / "qa_agent_v8.md",
                 reasoning_policy=policy,
             ),
         )
@@ -252,45 +252,52 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
 
     def test_qa_prompt_delegates_canonical_fields_to_code(self) -> None:
         prompt = (
-            ROOT / "prompts" / "synthetic" / "qa_agent_v7.md"
+            ROOT / "prompts" / "synthetic" / "qa_agent_v8.md"
         ).read_text(encoding="utf-8")
 
         previous_prompt = (
-            ROOT / "prompts" / "synthetic" / "qa_agent_v6.md"
+            ROOT / "prompts" / "synthetic" / "qa_agent_v7.md"
         ).read_text(encoding="utf-8")
-        self.assertIn("full claim or only its distinguishing detail", prompt)
+        self.assertIn("Evaluate the literal claim_text", prompt)
         self.assertIn("Vary framing and clause order", prompt)
+        self.assertIn("do not imply every modifier conflicts", prompt)
         self.assertIn("application constructs them deterministically", prompt)
         self.assertNotIn('["contradicted", "AUDIO_N"]', prompt)
-        self.assertLess(len(prompt), len(previous_prompt))
+        self.assertLess(len(prompt), 1800)
 
         verifier_prompt = (
-            ROOT / "prompts" / "synthetic" / "verifier_agent_v8.md"
+            ROOT / "prompts" / "synthetic" / "verifier_agent_v9.md"
         ).read_text(encoding="utf-8")
-        self.assertIn("Reject every cross-audio source swap", verifier_prompt)
-        self.assertIn("Caption omission", verifier_prompt)
+        self.assertIn("at least one central claim detail", verifier_prompt)
+        self.assertIn("not proof of physical impossibility", verifier_prompt)
+        self.assertIn("change missing from the literal claim_text", verifier_prompt)
+        self.assertIn("cross-audio source swaps", verifier_prompt)
 
     def test_claim_prompt_allows_related_and_explicit_subjective_contrasts(self) -> None:
         prompt = (
-            ROOT / "prompts" / "synthetic" / "claim_agent_v10.md"
+            ROOT / "prompts" / "synthetic" / "claim_agent_v11.md"
         ).read_text(encoding="utf-8")
 
         previous_prompt = (
-            ROOT / "prompts" / "synthetic" / "claim_agent_v9.md"
+            ROOT / "prompts" / "synthetic" / "claim_agent_v10.md"
         ).read_text(encoding="utf-8")
         self.assertIn("one coherent event", prompt)
         self.assertIn("combine related propositions", prompt)
-        self.assertIn("multiple phrases must describe the same event", prompt)
-        self.assertIn("disprove every changed proposition", prompt)
+        self.assertIn("multiple phrases must describe the same scene", prompt)
+        self.assertIn("at least one central caption-established fact", prompt)
+        self.assertIn("not by proving that the alternative was physically absent", prompt)
+        self.assertIn("do not each need separate contradictory evidence", prompt)
         self.assertIn("gentle versus aggressive", prompt)
         self.assertIn("loud versus quiet", prompt)
-        self.assertIn("Caption omission", prompt)
         self.assertIn("another audio", prompt)
-        self.assertIn("may paraphrase", prompt)
+        self.assertIn("directly stated by a selected caption", prompt)
+        self.assertIn("change appears in the final claim_text", prompt)
+        self.assertNotIn("disprove every changed proposition", prompt)
         self.assertNotIn("counterfactual", prompt.lower())
         self.assertNotIn("claim_type", prompt)
         self.assertNotIn("counterfactual_edit_type", prompt)
-        self.assertLess(len(prompt), len(previous_prompt))
+        self.assertGreater(len(prompt), len(previous_prompt))
+        self.assertLess(len(prompt), 3200)
 
     def test_source_references_and_feedback_are_bounded(self) -> None:
         labels = prompt_audio_source_labels(

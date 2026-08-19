@@ -41,12 +41,13 @@ unrelated retry errors are excluded from prompts.
 Final benchmark answers contain exactly two labels: an evidence judgment and its
 single determining source. Valid forms are `["supported", "AUDIO_1"]` and
 `["contradicted", "AUDIO_2"]`. Supported claims require explicit caption
-support; contradicted claims require positive, mutually incompatible caption
-evidence from the same audio. Evidence may use one or several captions from that
-audio to establish one or several related propositions about one coherent event.
-Contradictions require explicit, clearly incompatible same-audio evidence.
-Caption-stated relative or subjective contrasts such as loud/quiet or
-gentle/aggressive are allowed; omission-based cases and source swaps are excluded.
+support. Contradicted claims require at least one central detail that conflicts
+with positive captions from the same audio; other details may remain supported
+or neutral. This is a caption-reference judgment, not proof that an alternative
+sound was physically absent from the waveform. Same-scene object, tool, action,
+source, direction, or stated-attribute substitutions are valid even when the
+events could theoretically co-occur. Caption-omission-only cases, unrelated
+events, and cross-audio source swaps remain excluded.
 The default output directory is `data/synthetic/clotho_audio_units_v4`; v4
 removes the redundant `claim_type` and `counterfactual_edit_type` columns. Do
 not append these rows to an older checkpoint with a different column contract.
