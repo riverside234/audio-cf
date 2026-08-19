@@ -65,13 +65,13 @@ The Qwen profile uses the local `/data/not_backed_up/yxu209/models/qwen`
 Qwen3.8-27B checkpoint, the `qwen3` reasoning parser, and text-only loading.
 Both server profiles keep `dtype: auto`; their BF16 checkpoint configs make
 vLLM resolve this to BF16 while preserving model-metadata compatibility.
-The client sends Qwen3.8's native `reasoning_effort: low`. Both model profiles
+The client sends Qwen3.8's native `reasoning_effort: medium`. Both model profiles
 use stage-specific synthetic-data sampling: ClaimAgent uses `0.7/0.95`, QAAgent
-uses `0.5/0.95`, and VerifierAgent uses greedy decoding. A 1,024-token thinking
-budget leaves the remainder of each 2,048-token completion budget for the
+uses `0.5/0.95`, and VerifierAgent uses greedy decoding. A 2,048-token thinking
+budget leaves the remainder of each 3,072-token completion budget for the
 required final JSON; the server context is 8,192.
 Current vLLM Model Runner V2 does not support `thinking_token_budget`, so keep
-`VLLM_USE_V2_MODEL_RUNNER=0` while this profile sends its 1,024-token cap. The
+`VLLM_USE_V2_MODEL_RUNNER=0` while this profile sends its 2,048-token cap. The
 Triton GDN prefill backend avoids FlashInfer's first-run GDN JIT on H100.
 The server uses xgrammar with structured output enabled during reasoning. MTP
 is intentionally disabled: released vLLM builds can miss the transition from
@@ -95,11 +95,10 @@ python data_synthetic.py \
 ### Gemma 4
 
 Stop the Qwen server before switching because both profiles use port 8000. The
-Gemma server also uses an 8,192-token context and 2,048-token agent completion
-budgets. For Gemma, `reasoning_effort: low` enables thinking but does not lower
-its token use relative to `medium` or `high`; `thinking_token_budget: 1024` is
-the actual private-reasoning cap. Set the effort to `none` only to disable
-thinking entirely.
+Gemma server also uses an 8,192-token context and 3,072-token agent completion
+budgets. For Gemma, `reasoning_effort: medium` enables thinking;
+`thinking_token_budget: 2048` is the actual private-reasoning cap. Set the
+effort to `none` only to disable thinking entirely.
 The server pins xgrammar and disables arbitrary JSON whitespace to mitigate the
 Gemma 4 constrained-decoding loop reported in vLLM issue 40080. Restart the
 Gemma server after changing or pulling its server YAML.

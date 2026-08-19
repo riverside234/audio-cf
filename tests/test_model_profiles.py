@@ -56,16 +56,16 @@ class ModelProfileTests(unittest.TestCase):
                 ):
                     self.assertEqual(
                         client["generation"][agent_name]["max_tokens"],
-                        2048,
+                        3072,
                     )
 
     def test_gemma_uses_reasoning_effort_request_fields(self) -> None:
         config = load_yaml(ROOT / "configs" / "vllm_client_gemma4.yaml")
         extra_body = build_request_extra_body(config, config["client"])
 
-        self.assertEqual(extra_body["reasoning_effort"], "low")
+        self.assertEqual(extra_body["reasoning_effort"], "medium")
         self.assertFalse(extra_body["include_reasoning"])
-        self.assertEqual(extra_body["thinking_token_budget"], 1024)
+        self.assertEqual(extra_body["thinking_token_budget"], 2048)
         self.assertEqual(extra_body["top_k"], 64)
         self.assertNotIn("chat_template_kwargs", extra_body)
 
@@ -82,9 +82,9 @@ class ModelProfileTests(unittest.TestCase):
         config = load_yaml(ROOT / "configs" / "vllm_client_qwen38.yaml")
         extra_body = build_request_extra_body(config, config["client"])
 
-        self.assertEqual(extra_body["reasoning_effort"], "low")
+        self.assertEqual(extra_body["reasoning_effort"], "medium")
         self.assertTrue(extra_body["include_reasoning"])
-        self.assertEqual(extra_body["thinking_token_budget"], 1024)
+        self.assertEqual(extra_body["thinking_token_budget"], 2048)
         self.assertEqual(
             extra_body["chat_template_kwargs"],
             {"enable_thinking": True, "preserve_thinking": False},
@@ -115,7 +115,7 @@ class ModelProfileTests(unittest.TestCase):
                     sampling = config["generation"][agent_name]
                     self.assertEqual(sampling["temperature"], temperature)
                     self.assertEqual(sampling["top_p"], top_p)
-                    self.assertEqual(sampling["max_tokens"], 2048)
+                    self.assertEqual(sampling["max_tokens"], 3072)
 
     def test_qwen_prefilled_opening_think_token_is_sanitized(self) -> None:
         clean, removed = strip_visible_reasoning(

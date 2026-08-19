@@ -23,11 +23,11 @@ generation:
   reasoning:
     enabled: true
     mode: "qwen3_vllm"
-    # Low is sufficient for the short, schema-constrained grounding decisions.
-    effort: "low"
+    # Medium gives the grounding decisions more deliberation room.
+    effort: "medium"
     # Force Qwen to leave thinking mode early enough to emit the final JSON.
-    # This is part of the 2048-token completion budget below.
-    thinking_token_budget: 1024
+    # This is part of the 3072-token completion budget below.
+    thinking_token_budget: 2048
     # Required as a compatibility fallback: some vLLM Qwen parser paths place
     # schema-constrained final JSON in message.reasoning with null content.
     # The client accepts it only when it is one complete JSON object.
@@ -43,22 +43,22 @@ generation:
   default:
     temperature: 0.5
     top_p: 0.95
-    max_tokens: 2048
+    max_tokens: 3072
   claim_agent:
     # Moderate sampling preserves useful claim diversity.
     temperature: 0.7
     top_p: 0.95
-    max_tokens: 2048
+    max_tokens: 3072
   qa_agent:
     # Grounded task generation favors Bonito's lower-temperature regime.
     temperature: 0.5
     top_p: 0.95
-    max_tokens: 2048
+    max_tokens: 3072
   verifier_agent:
     # Verification is a fixed judgment, so use greedy decoding.
     temperature: 0.0
     top_p: 1.0
-    max_tokens: 2048
+    max_tokens: 3072
 
 retry:
   max_attempts: 3
@@ -77,7 +77,7 @@ agents:
     claim_agent: "prompts/synthetic/claim_agent_v10.md"
     qa_agent: "prompts/synthetic/qa_agent_v7.md"
     verifier_agent: "prompts/synthetic/verifier_agent_v8.md"
-  prompt_version: "claim_agent_v10+qa_agent_v7+verifier_agent_v8+qwen3.8_thinking_v3"
+  prompt_version: "claim_agent_v10+qa_agent_v7+verifier_agent_v8+qwen3.8_thinking2048_v4"
 
 batching:
   runner_max_concurrency: 64
