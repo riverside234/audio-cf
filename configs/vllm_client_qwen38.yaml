@@ -46,7 +46,7 @@ generation:
     max_tokens: 3072
   claim_agent:
     # Moderate sampling preserves useful diversity across candidates.
-    temperature: 0.6
+    temperature: 0.3
     top_p: 0.95
     max_tokens: 3072
   qa_agent:
