@@ -62,7 +62,6 @@ retry:
   jitter_s: 0.25
 
 agents:
-  run_verifier: false
   max_validation_attempts: 2
   condition_sampling:
     strategy: "cycle"
@@ -70,8 +69,8 @@ agents:
   prompts:
     claim_agent: "prompts/synthetic/claim_agent_v11.md"
     qa_agent: "prompts/synthetic/qa_agent_v8.md"
-    verifier_agent: "prompts/synthetic/verifier_agent_v9.md"
-  prompt_version: "claim_agent_v11+qa_agent_v8+verifier_agent_v9+gemma4_thinking2048_v9"
+    verifier_agent: "prompts/synthetic/verifier_agent_v10.md"
+  prompt_version: "claim_agent_v11+qa_agent_v8+verifier_agent_v10+gemma4_thinking2048_v9"
 
 batching:
   runner_max_concurrency: 32

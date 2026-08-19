@@ -1,4 +1,4 @@
-"""Optional verifier agent for generated examples."""
+"""Mandatory verifier agent for generated examples."""
 
 from __future__ import annotations
 

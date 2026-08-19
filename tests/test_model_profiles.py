@@ -46,6 +46,7 @@ class ModelProfileTests(unittest.TestCase):
                 self.assertEqual(server["reasoning-parser"], parser)
                 self.assertEqual(server["dtype"], "auto")
                 self.assertEqual(server["max-model-len"], 8192)
+                self.assertNotIn("run_verifier", client["agents"])
                 for prompt_path in client["agents"]["prompts"].values():
                     self.assertTrue((ROOT / prompt_path).is_file())
                 for agent_name in (

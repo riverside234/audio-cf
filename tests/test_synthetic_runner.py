@@ -12,6 +12,7 @@ from synthetic.agents import (
     QAAgent,
     ReasoningPolicy,
     SyntheticGenerationRunner,
+    VerifierAgent,
 )
 from synthetic.agents.conditions import build_target_conditions
 from synthetic.agents.schemas import (
@@ -26,7 +27,11 @@ from synthetic.agents.state import (
     prompt_audio_source_labels,
     validation_feedback,
 )
-from synthetic.agents.validators import validate_claim_record, validate_qa_record
+from synthetic.agents.validators import (
+    validate_claim_record,
+    validate_qa_record,
+    validate_verifier_record,
+)
 from synthetic.infrastructure.schema_io import (
     SchemaValidationError,
     parse_json_object,
@@ -64,6 +69,12 @@ class SyntheticGenerationRunnerTests(unittest.IsolatedAsyncioTestCase):
             "{claim_record_json}\n{validation_feedback}\n{reasoning_instruction}\n",
             encoding="utf-8",
         )
+        self.verifier_prompt = prompt_dir / "verifier.md"
+        self.verifier_prompt.write_text(
+            "{audio_context}\n{target_condition_json}\n{claim_record_json}\n"
+            "{qa_record_json}\n{validation_feedback}\n{reasoning_instruction}\n",
+            encoding="utf-8",
+        )
 
     async def asyncTearDown(self) -> None:
         self.temp_dir.cleanup()
@@ -71,7 +82,11 @@ class SyntheticGenerationRunnerTests(unittest.IsolatedAsyncioTestCase):
     async def test_fake_client_generates_valid_example_and_strips_reasoning(self) -> None:
         claim_response = f"<think>private check</think>\n{json.dumps(valid_claim())}"
         fake_client = FakeLLMClient(
-            [claim_response, json.dumps(valid_qa_generation())]
+            [
+                claim_response,
+                json.dumps(valid_qa_generation()),
+                json.dumps(valid_verifier()),
+            ]
         )
         runner = self._runner(fake_client)
 
@@ -99,7 +114,8 @@ class SyntheticGenerationRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(audit_row["unit_id"], "unit-1")
         self.assertEqual(state.visible_reasoning_stripped, ["claim_agent"])
         self.assertNotIn("private check", state.raw_claim_text or "")
-        self.assertEqual(len(fake_client.calls), 2)
+        self.assertEqual(state.verifier_record, valid_verifier())
+        self.assertEqual(len(fake_client.calls), 3)
         for call in fake_client.calls:
             self.assertEqual(call["response_format"]["type"], "json_schema")
         qa_wire_schema = fake_client.calls[1]["response_format"]["json_schema"][
@@ -130,13 +146,14 @@ class SyntheticGenerationRunnerTests(unittest.IsolatedAsyncioTestCase):
                 json.dumps(invalid_claim),
                 json.dumps(valid_claim()),
                 json.dumps(valid_qa_generation()),
+                json.dumps(valid_verifier()),
             ]
         )
         runner = self._runner(fake_client)
 
         state = await runner.run_unit(audio_unit(), unit_index=0)
 
-        self.assertEqual(len(fake_client.calls), 3)
+        self.assertEqual(len(fake_client.calls), 4)
         self.assertEqual(len(state.validation_errors), 1)
         self.assertIn("claim_status must be 'SUPPORTED'", state.validation_errors[0])
         self.assertIn("ClaimAgent attempt 1", fake_client.calls[1]["messages"][0]["content"])
@@ -153,13 +170,14 @@ class SyntheticGenerationRunnerTests(unittest.IsolatedAsyncioTestCase):
                 json.dumps(valid_claim()),
                 json.dumps(invalid_qa),
                 json.dumps(valid_qa_generation()),
+                json.dumps(valid_verifier()),
             ]
         )
         runner = self._runner(fake_client)
 
         state = await runner.run_unit(audio_unit(), unit_index=0)
 
-        self.assertEqual(len(fake_client.calls), 3)
+        self.assertEqual(len(fake_client.calls), 4)
         self.assertEqual(state.final_example["answer"], ["supported", "AUDIO_1"])
         self.assertIn(
             "question must contain at least six words",
@@ -168,7 +186,11 @@ class SyntheticGenerationRunnerTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_runner_generates_same_audio_contradiction(self) -> None:
         fake_client = FakeLLMClient(
-            [json.dumps(contradicted_claim()), json.dumps(valid_qa_generation())]
+            [
+                json.dumps(contradicted_claim()),
+                json.dumps(contradicted_qa_generation()),
+                json.dumps(valid_verifier()),
+            ]
         )
         runner = self._runner(fake_client)
 
@@ -177,6 +199,24 @@ class SyntheticGenerationRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state.target_condition["claim_status"], "CONTRADICTED")
         self.assertEqual(state.target_condition["evidence_sources"], ["AUDIO_1"])
         self.assertEqual(state.final_example["answer"], ["contradicted", "AUDIO_1"])
+
+    async def test_verifier_fail_rejects_example_before_finalization(self) -> None:
+        fake_client = FakeLLMClient(
+            [
+                json.dumps(valid_claim()),
+                json.dumps(valid_qa_generation()),
+                json.dumps(failed_verifier("The question is unrelated to the claim.")),
+            ]
+        )
+        runner = self._runner(fake_client)
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Verifier rejected example: The question is unrelated",
+        ):
+            await runner.run_unit(audio_unit(), unit_index=0)
+
+        self.assertEqual(len(fake_client.calls), 3)
 
     def _runner(self, fake_client: FakeLLMClient) -> SyntheticGenerationRunner:
         policy = ReasoningPolicy(strip_visible_reasoning=True)
@@ -190,9 +230,15 @@ class SyntheticGenerationRunnerTests(unittest.IsolatedAsyncioTestCase):
             prompt_path=self.qa_prompt,
             reasoning_policy=policy,
         )
+        verifier_agent = VerifierAgent(
+            llm_client=fake_client,  # type: ignore[arg-type]
+            prompt_path=self.verifier_prompt,
+            reasoning_policy=policy,
+        )
         return SyntheticGenerationRunner(
             claim_agent=claim_agent,
             qa_agent=qa_agent,
+            verifier_agent=verifier_agent,
             max_validation_attempts=2,
         )
 
@@ -218,7 +264,11 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
             ],
         ]
         fake_client = FakeLLMClient(
-            [json.dumps(valid_claim()), json.dumps(valid_qa_generation())]
+            [
+                json.dumps(valid_claim()),
+                json.dumps(valid_qa_generation()),
+                json.dumps(valid_verifier()),
+            ]
         )
         policy = ReasoningPolicy(mode="gemma4_vllm", strip_visible_reasoning=True)
         runner = SyntheticGenerationRunner(
@@ -230,6 +280,14 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
             qa_agent=QAAgent(
                 llm_client=fake_client,  # type: ignore[arg-type]
                 prompt_path=ROOT / "prompts" / "synthetic" / "qa_agent_v8.md",
+                reasoning_policy=policy,
+            ),
+            verifier_agent=VerifierAgent(
+                llm_client=fake_client,  # type: ignore[arg-type]
+                prompt_path=ROOT
+                / "prompts"
+                / "synthetic"
+                / "verifier_agent_v10.md",
                 reasoning_policy=policy,
             ),
         )
@@ -266,12 +324,18 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
         self.assertLess(len(prompt), 1800)
 
         verifier_prompt = (
+            ROOT / "prompts" / "synthetic" / "verifier_agent_v10.md"
+        ).read_text(encoding="utf-8")
+        previous_verifier_prompt = (
             ROOT / "prompts" / "synthetic" / "verifier_agent_v9.md"
         ).read_text(encoding="utf-8")
         self.assertIn("at least one central claim detail", verifier_prompt)
         self.assertIn("not proof of physical impossibility", verifier_prompt)
         self.assertIn("change missing from the literal claim_text", verifier_prompt)
         self.assertIn("cross-audio source swaps", verifier_prompt)
+        self.assertIn("mandatory final acceptance gate", verifier_prompt)
+        self.assertIn("empty validation_errors list", verifier_prompt)
+        self.assertGreater(len(verifier_prompt), len(previous_verifier_prompt))
 
     def test_claim_prompt_allows_related_and_explicit_subjective_contrasts(self) -> None:
         prompt = (
@@ -422,6 +486,37 @@ class VLLMResponseSchemaTests(unittest.TestCase):
 
         validate_qa_record(qa, claim, audio_count=2)
 
+    def test_qa_question_must_reference_a_meaningful_claim_detail(self) -> None:
+        qa = valid_qa()
+        qa["question"] = "Which audio contains a barking dog near the gate?"
+
+        with self.assertRaisesRegex(ValueError, "meaningful detail from claim_text"):
+            validate_qa_record(qa, valid_claim(), audio_count=2)
+
+        qa["question"] = (
+            "Which recording establishes the rainfall judgment for this benchmark?"
+        )
+        validate_qa_record(qa, valid_claim(), audio_count=2)
+
+    def test_verifier_requires_a_clean_pass(self) -> None:
+        validate_verifier_record(valid_verifier(), audio_count=2)
+
+        with self.assertRaisesRegex(ValueError, "Verifier rejected example"):
+            validate_verifier_record(
+                failed_verifier("The evidence source is incorrect."),
+                audio_count=2,
+            )
+
+        pass_with_errors = valid_verifier()
+        pass_with_errors["validation_errors"] = ["Unexpected residual error."]
+        with self.assertRaisesRegex(ValueError, "PASS must have an empty"):
+            validate_verifier_record(pass_with_errors, audio_count=2)
+
+        pass_with_correction = valid_verifier()
+        pass_with_correction["corrected_claim_status"] = "CONTRADICTED"
+        with self.assertRaisesRegex(ValueError, "must not propose"):
+            validate_verifier_record(pass_with_correction, audio_count=2)
+
     def test_contradiction_basis_may_paraphrase_positive_caption_evidence(self) -> None:
         claim = contradicted_claim()
         claim["contradiction_basis"] = (
@@ -571,6 +666,38 @@ def valid_qa_generation() -> Dict[str, Any]:
     return {
         "question": "How should the rainfall description be classified, and which audio supports it?",
         "claim_evaluation_explanation": "AUDIO_1 explicitly describes steady rain.",
+    }
+
+
+def contradicted_qa_generation() -> Dict[str, Any]:
+    return {
+        "question": (
+            "Which audio determines whether the completely dry weather claim is "
+            "supported or contradicted?"
+        ),
+        "claim_evaluation_explanation": (
+            "AUDIO_1 describes steady rain, which conflicts with completely dry weather."
+        ),
+    }
+
+
+def valid_verifier() -> Dict[str, Any]:
+    return {
+        "verifier_status": "PASS",
+        "validation_errors": [],
+        "validation_notes": "All checks passed.",
+        "corrected_claim_status": None,
+        "corrected_evidence_sources": [],
+    }
+
+
+def failed_verifier(message: str) -> Dict[str, Any]:
+    return {
+        "verifier_status": "FAIL",
+        "validation_errors": [message],
+        "validation_notes": "The example must be rejected.",
+        "corrected_claim_status": None,
+        "corrected_evidence_sources": [],
     }
 
 

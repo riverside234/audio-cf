@@ -25,6 +25,46 @@ from .state import (
 GROUNDING_IGNORED_TOKENS = frozenset(
     {"a", "an", "the", "be", "been", "being", "is", "are", "was", "were"}
 )
+QA_RELEVANCE_IGNORED_TOKENS = GROUNDING_IGNORED_TOKENS | frozenset(
+    {
+        "and",
+        "audio",
+        "caption",
+        "claim",
+        "classified",
+        "classification",
+        "clip",
+        "contradicted",
+        "contradiction",
+        "description",
+        "determine",
+        "determines",
+        "determining",
+        "does",
+        "event",
+        "evidence",
+        "from",
+        "heard",
+        "how",
+        "into",
+        "judgment",
+        "recording",
+        "scene",
+        "should",
+        "sound",
+        "sounds",
+        "source",
+        "statement",
+        "supported",
+        "supporting",
+        "that",
+        "this",
+        "what",
+        "whether",
+        "which",
+        "with",
+    }
+)
 
 
 class AgentValidationError(ValueError):
@@ -120,6 +160,10 @@ def validate_qa_record(
         raise AgentValidationError(
             "question must contain at least six words and end with '?'."
         )
+    _validate_question_relevance(
+        question,
+        str(claim_record.get("claim_text", "")).strip(),
+    )
 
     answer = _string_list(qa_record.get("answer"))
     expected_answer = _benchmark_answer(claim_record)
@@ -177,8 +221,24 @@ def _benchmark_answer(claim_record: Mapping[str, Any]) -> List[str]:
 
 def validate_verifier_record(verifier_record: Mapping[str, Any], audio_count: int) -> None:
     validate_json(verifier_record, VERIFIER_OUTPUT_SCHEMA)
+    status = str(verifier_record.get("verifier_status", ""))
+    validation_errors = _string_list(verifier_record.get("validation_errors"))
+    validation_notes = str(verifier_record.get("validation_notes", "")).strip()
+    corrected_status = verifier_record.get("corrected_claim_status")
     corrected_sources = _string_list(verifier_record.get("corrected_evidence_sources"))
     _validate_evidence_sources(corrected_sources, audio_count)
+
+    if status == "FAIL":
+        detail = "; ".join(validation_errors) or validation_notes or "no reason provided"
+        raise AgentValidationError(f"Verifier rejected example: {detail[:500]}")
+    if validation_errors:
+        raise AgentValidationError(
+            "Verifier PASS must have an empty validation_errors list."
+        )
+    if corrected_status is not None or corrected_sources:
+        raise AgentValidationError(
+            "Verifier PASS must not propose claim-status or evidence-source corrections."
+        )
 
 
 def build_final_example(
@@ -256,6 +316,35 @@ def _validate_supporting_caption_phrases(
         )
 
 
+def _validate_question_relevance(question: str, claim_text: str) -> None:
+    question_tokens = _qa_relevance_tokens(question)
+    claim_tokens = _qa_relevance_tokens(claim_text)
+    if any(
+        _tokens_are_related(question_token, claim_token)
+        for question_token in question_tokens
+        for claim_token in claim_tokens
+    ):
+        return
+    raise AgentValidationError(
+        "question must mention at least one meaningful detail from claim_text."
+    )
+
+
+def _qa_relevance_tokens(text: str) -> List[str]:
+    return [
+        token
+        for token in _grounding_tokens(text)
+        if token not in QA_RELEVANCE_IGNORED_TOKENS and len(token) >= 3
+    ]
+
+
+def _tokens_are_related(left: str, right: str) -> bool:
+    if left == right:
+        return True
+    shorter, longer = sorted((left, right), key=len)
+    return len(shorter) >= 4 and longer.startswith(shorter)
+
+
 def _is_caption_grounded_phrase(phrase: str, caption: str) -> bool:
     phrase_tokens = _grounding_tokens(phrase)
     caption_tokens = _grounding_tokens(caption)
@@ -299,6 +388,7 @@ def _uses_caption_absence_as_negative_evidence(text: str) -> bool:
         "not in the captions",
     ]
     return any(flag in lowered for flag in red_flags)
+
 
 def _example_id(unit_id: str, claim_text: str, question: str) -> str:
     key = f"{unit_id}\n{claim_text}\n{question}"

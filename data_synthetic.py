@@ -329,7 +329,6 @@ def build_configured_runner(
     prompt_paths: Mapping[str, Path],
 ) -> Any:
     agents_config = dict(get_nested(vllm_config, ["agents"], {}) or {})
-    run_verifier = bool(agents_config.get("run_verifier", False))
     max_validation_attempts = int(agents_config.get("max_validation_attempts", 2) or 2)
 
     condition_config = dict(agents_config.get("condition_sampling") or {})
@@ -362,24 +361,21 @@ def build_configured_runner(
         reasoning_policy=reasoning_policy,
     )
 
-    verifier_agent: Optional[VerifierAgent] = None
-    if run_verifier:
-        verifier_agent = VerifierAgent(
-            llm_client=llm_client,
-            prompt_path=prompt_paths["verifier_agent"],
-            retry_config=retry_config,
-            temperature=verifier_settings.get("temperature"),
-            top_p=verifier_settings.get("top_p"),
-            max_tokens=verifier_settings.get("max_tokens"),
-            reasoning_policy=reasoning_policy,
-        )
+    verifier_agent = VerifierAgent(
+        llm_client=llm_client,
+        prompt_path=prompt_paths["verifier_agent"],
+        retry_config=retry_config,
+        temperature=verifier_settings.get("temperature"),
+        top_p=verifier_settings.get("top_p"),
+        max_tokens=verifier_settings.get("max_tokens"),
+        reasoning_policy=reasoning_policy,
+    )
 
     return build_runner(
         claim_agent=claim_agent,
         qa_agent=qa_agent,
         verifier_agent=verifier_agent,
         condition_sampler=condition_sampler,
-        run_verifier=run_verifier,
         max_validation_attempts=max_validation_attempts,
         max_concurrency=int(
             get_nested(vllm_config, ["batching", "runner_max_concurrency"], 8) or 8
@@ -530,7 +526,7 @@ def build_stats(
         "completed_batches": completed_batches,
         "checkpoint_dir": str(build_output_paths(config).checkpoint_dir),
         "generation_model": get_nested(vllm_config, ["client", "model"], ""),
-        "run_verifier": bool(get_nested(vllm_config, ["agents", "run_verifier"], False)),
+        "run_verifier": True,
         "reasoning_enabled": bool(
             get_nested(vllm_config, ["generation", "reasoning", "enabled"], True)
         ),
@@ -568,7 +564,7 @@ def build_stats(
         "prompt_version": get_nested(
             vllm_config,
             ["agents", "prompt_version"],
-            "claim_agent_v11+qa_agent_v8+verifier_agent_v9",
+            "claim_agent_v11+qa_agent_v8+verifier_agent_v10",
         ),
         "runner_max_concurrency": get_nested(
             vllm_config,
@@ -796,7 +792,7 @@ def resolve_prompt_paths(vllm_config: Mapping[str, Any]) -> Dict[str, Path]:
             Path.cwd(),
         ),
         "verifier_agent": resolve_path(
-            prompts.get("verifier_agent", "prompts/synthetic/verifier_agent_v9.md"),
+            prompts.get("verifier_agent", "prompts/synthetic/verifier_agent_v10.md"),
             Path.cwd(),
         ),
     }

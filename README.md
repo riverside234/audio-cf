@@ -34,10 +34,11 @@ Qwen3.8 with the explicit `--vllm-config` command below.
 
 Agent prompts are stage-specific: ClaimAgent receives at most three rotating
 captions from target-relevant sources, QAAgent receives the validated claim and
-generates only a question plus explanation, and VerifierAgent independently
-receives relevant captions when enabled. Python constructs the canonical answer
-and source fields from the validated claim. File names, IDs, full schemas, and
-unrelated retry errors are excluded from prompts.
+generates only a question plus explanation, and the mandatory VerifierAgent
+independently checks the complete example against relevant captions. Python
+constructs the canonical answer and source fields from the validated claim. A
+verifier `FAIL` rejects the unit before finalization. File names, IDs, full
+schemas, and unrelated retry errors are excluded from prompts.
 Final benchmark answers contain exactly two labels: an evidence judgment and its
 single determining source. Valid forms are `["supported", "AUDIO_1"]` and
 `["contradicted", "AUDIO_2"]`. Supported claims require explicit caption

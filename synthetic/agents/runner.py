@@ -25,9 +25,8 @@ class SyntheticGenerationRunner:
 
     claim_agent: ClaimAgent
     qa_agent: QAAgent
-    verifier_agent: Optional[VerifierAgent] = None
+    verifier_agent: VerifierAgent
     condition_sampler: Optional[TargetConditionSampler] = None
-    run_verifier: bool = False
     max_validation_attempts: int = 2
     max_concurrency: int = 8
 
@@ -52,9 +51,7 @@ class SyntheticGenerationRunner:
         state.target_condition = self._choose_condition(state).to_dict()
         await self._run_claim_with_retries(state)
         await self._run_qa_with_retries(state)
-
-        if self.run_verifier and self.verifier_agent is not None:
-            await self._run_verifier(state)
+        await self._run_verifier(state)
 
         state.final_example = build_final_example(state=state)
         return state
@@ -93,7 +90,6 @@ class SyntheticGenerationRunner:
                     raise
 
     async def _run_verifier(self, state: SyntheticGenerationState) -> None:
-        assert self.verifier_agent is not None
         audio_count = int(state.unit_record["audio_count"])
         state.verifier_record = await self.verifier_agent.verify(state)
         validate_verifier_record(state.verifier_record, audio_count)
@@ -102,9 +98,8 @@ class SyntheticGenerationRunner:
 def build_runner(
     claim_agent: ClaimAgent,
     qa_agent: QAAgent,
-    verifier_agent: Optional[VerifierAgent] = None,
+    verifier_agent: VerifierAgent,
     condition_sampler: Optional[TargetConditionSampler] = None,
-    run_verifier: bool = False,
     max_validation_attempts: int = 2,
     max_concurrency: int = 8,
 ) -> SyntheticGenerationRunner:
@@ -113,7 +108,6 @@ def build_runner(
         qa_agent=qa_agent,
         verifier_agent=verifier_agent,
         condition_sampler=condition_sampler,
-        run_verifier=run_verifier,
         max_validation_attempts=max_validation_attempts,
         max_concurrency=max_concurrency,
     )
