@@ -104,7 +104,7 @@ class ModelProfileTests(unittest.TestCase):
         expected = {
             "default": (0.5, 0.95),
             "claim_agent": (0.7, 0.95),
-            "qa_agent": (0.4, 0.95),
+            "qa_agent": (0.5, 0.95),
             "verifier_agent": (0.0, 1.0),
         }
         for profile in ("gemma4", "qwen38"):

@@ -14,7 +14,8 @@ Return one JSON object with exactly these keys: question, claim_evaluation_expla
 Rules:
 - Evaluate the literal claim_text. Never substitute an intended edit mentioned only in contradiction_basis or discuss planning and self-correction.
 - question: write a standalone grammatical question of at least six words ending with ?. Identify the literal claim unambiguously using the full claim or its distinguishing detail.
-- Ask for both the supported/contradicted judgment and the determining audio without revealing either answer.
+- Ask for the supported/contradicted judgment. Asking which audio or recording determines it is optional because the downstream evaluation prompt may request the source separately.
+- Never name an AUDIO_N label or supply the caption's corrective alternative, whether or not the question requests the source.
 - Vary framing and clause order instead of defaulting to one template.
 - claim_evaluation_explanation: briefly connect the literal claim and sole evidence source to the label. For CONTRADICTED, identify at least one central caption conflict; do not imply every modifier conflicts.
 - Do not discuss confidence, schemas, or validation metadata, and do not add facts.

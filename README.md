@@ -39,6 +39,8 @@ independently checks the complete example against relevant captions. Python
 constructs the canonical answer and source fields from the validated claim. A
 verifier `FAIL` rejects that candidate before finalization. File names, IDs, full
 schemas, and unrelated retry errors are excluded from prompts.
+Questions must request the evidence judgment; requesting the determining audio
+is optional because a downstream evaluation prompt may request it separately.
 By default, each audio unit produces two independently verified candidates, as
 set by `generation.examples_per_unit` in `data_synthetic.yaml`. Candidate calls
 share the existing concurrency limit. After verification, same-unit candidates
@@ -74,7 +76,7 @@ Both server profiles keep `dtype: auto`; their BF16 checkpoint configs make
 vLLM resolve this to BF16 while preserving model-metadata compatibility.
 The client sends Qwen3.8's native `reasoning_effort: medium`. Both model profiles
 use stage-specific synthetic-data sampling: ClaimAgent uses `0.7/0.95`, QAAgent
-uses `0.4/0.95`, and VerifierAgent uses greedy decoding. A 2,048-token thinking
+uses `0.5/0.95`, and VerifierAgent uses greedy decoding. A 2,048-token thinking
 budget leaves the remainder of each 3,072-token completion budget for the
 required final JSON; the server context is 8,192.
 Current vLLM Model Runner V2 does not support `thinking_token_budget`, so keep

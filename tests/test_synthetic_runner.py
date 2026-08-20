@@ -280,7 +280,7 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
             ),
             qa_agent=QAAgent(
                 llm_client=fake_client,  # type: ignore[arg-type]
-                prompt_path=ROOT / "prompts" / "synthetic" / "qa_agent_v9.md",
+                prompt_path=ROOT / "prompts" / "synthetic" / "qa_agent_v10.md",
                 reasoning_policy=policy,
             ),
             verifier_agent=VerifierAgent(
@@ -288,7 +288,7 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
                 prompt_path=ROOT
                 / "prompts"
                 / "synthetic"
-                / "verifier_agent_v11.md",
+                / "verifier_agent_v12.md",
                 reasoning_policy=policy,
             ),
         )
@@ -311,26 +311,29 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
 
     def test_qa_prompt_delegates_canonical_fields_to_code(self) -> None:
         prompt = (
-            ROOT / "prompts" / "synthetic" / "qa_agent_v9.md"
+            ROOT / "prompts" / "synthetic" / "qa_agent_v10.md"
         ).read_text(encoding="utf-8")
 
         previous_prompt = (
-            ROOT / "prompts" / "synthetic" / "qa_agent_v8.md"
+            ROOT / "prompts" / "synthetic" / "qa_agent_v9.md"
         ).read_text(encoding="utf-8")
         self.assertIn("Evaluate the literal claim_text", prompt)
         self.assertIn("Vary framing and clause order", prompt)
         self.assertIn("do not imply every modifier conflicts", prompt)
         self.assertIn("Never name an AUDIO_N label", prompt)
         self.assertIn("caption's corrective alternative", prompt)
+        self.assertIn("determines it is optional", prompt)
+        self.assertIn("downstream evaluation prompt", prompt)
+        self.assertNotIn("Ask for both the supported/contradicted judgment", prompt)
         self.assertIn("application constructs them deterministically", prompt)
         self.assertNotIn('["contradicted", "AUDIO_N"]', prompt)
         self.assertLess(len(prompt), 1800)
 
         verifier_prompt = (
-            ROOT / "prompts" / "synthetic" / "verifier_agent_v11.md"
+            ROOT / "prompts" / "synthetic" / "verifier_agent_v12.md"
         ).read_text(encoding="utf-8")
         previous_verifier_prompt = (
-            ROOT / "prompts" / "synthetic" / "verifier_agent_v10.md"
+            ROOT / "prompts" / "synthetic" / "verifier_agent_v11.md"
         ).read_text(encoding="utf-8")
         self.assertIn("at least one central claim detail", verifier_prompt)
         self.assertIn("not proof of physical impossibility", verifier_prompt)
@@ -338,7 +341,9 @@ class PromptContextTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("cross-audio source swaps", verifier_prompt)
         self.assertIn("mandatory final acceptance gate", verifier_prompt)
         self.assertIn("empty validation_errors list", verifier_prompt)
-        self.assertIn("request for which audio/recording", verifier_prompt)
+        self.assertIn("determines it is optional", verifier_prompt)
+        self.assertIn("downstream evaluation prompt", verifier_prompt)
+        self.assertNotIn("omits either the evidence judgment", verifier_prompt)
         self.assertIn("names an AUDIO_N label", verifier_prompt)
         self.assertGreater(len(verifier_prompt), len(previous_verifier_prompt))
 
@@ -504,6 +509,12 @@ class VLLMResponseSchemaTests(unittest.TestCase):
         qa["question"] = (
             "Which recording establishes the rainfall judgment for this benchmark?"
         )
+        validate_qa_record(qa, valid_claim(), audio_count=2)
+
+    def test_qa_question_may_omit_the_audio_source_request(self) -> None:
+        qa = valid_qa()
+        qa["question"] = "Is the rainfall description supported by the available evidence?"
+
         validate_qa_record(qa, valid_claim(), audio_count=2)
 
     def test_verifier_requires_a_clean_pass(self) -> None:
